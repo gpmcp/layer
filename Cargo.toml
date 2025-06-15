@@ -11,10 +11,19 @@ path = "examples/sse_server.rs"
 name = "test_hyper_server"
 path = "examples/test_hyper_server.rs"
 
+[[example]]
+name = "test_stdio_server"
+path = "examples/test_stdio_server.rs"
+
+[[example]]
+name = "test_client"
+path = "examples/test_client.rs"
+
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9"
 axum = "0.7"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors"] }
@@ -23,7 +32,7 @@ uuid = { version = "1.0", features = ["v4"] }
 clap = { version = "4.0", features = ["derive"] }
 anyhow = "1.0"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 async-stream = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", rev = "a66f66ae345a0fafde1e2ee496ec137d77aef82a", features = [
@@ -46,3 +55,4 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 eventsource-stream = "0.2"
 futures-util = "0.3"
 bytes = "1.0"
+async-trait = "0.1"
