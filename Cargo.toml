@@ -1,0 +1,48 @@
+[package]
+name = "layer"
+version = "0.1.0"
+edition = "2024"
+
+[[example]]
+name = "sse_server"
+path = "examples/sse_server.rs"
+
+[[example]]
+name = "test_hyper_server"
+path = "examples/test_hyper_server.rs"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+futures = "0.3"
+uuid = { version = "1.0", features = ["v4"] }
+clap = { version = "4.0", features = ["derive"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+async-stream = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", rev = "a66f66ae345a0fafde1e2ee496ec137d77aef82a", features = [
+    "client",
+    "transport-sse-client",
+    "reqwest",
+    "transport-streamable-http-client",
+    "transport-child-process",
+    "server",
+    "transport-sse-server",
+    "transport-streamable-http-server",
+] }
+gpmcp_domain = { path = "../gpmcp/crates/gpmcp_domain" }
+derive_builder = "0.20.2"
+tokio-util = "0.7.15"
+hyper = { version = "1.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+eventsource-stream = "0.2"
+futures-util = "0.3"
+bytes = "1.0"
