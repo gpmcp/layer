@@ -233,11 +233,21 @@ impl GpmcpServer {
             .spawn()
             .with_context(|| format!("Failed to start command: {}", command_runner.command))?;
 
-        tracing::info!(
-            "Started command process: {} with args: {:?}",
-            command_runner.command,
-            command_runner.args
-        );
+        // Log the PID if available
+        match child.id() {
+            Some(pid) => {
+                tracing::info!(
+                    "Started command process: {} with args: {:?}, PID: {}",
+                    command_runner.command, command_runner.args, pid
+                );
+            }
+            None => {
+                tracing::warn!(
+                    "Started command process: {} with args: {:?}, but PID is not available (process may have exited quickly)",
+                    command_runner.command, command_runner.args
+                );
+            }
+        }
 
         Ok(child)
     }
@@ -262,11 +272,21 @@ impl GpmcpServer {
             .spawn()
             .with_context(|| format!("Failed to start command: {}", command_runner.command))?;
 
-        tracing::info!(
-            "Started stdio command process: {} with args: {:?}",
-            command_runner.command,
-            command_runner.args
-        );
+        // Log the PID if available
+        match child.id() {
+            Some(pid) => {
+                tracing::info!(
+                    "Started stdio command process: {} with args: {:?}, PID: {}",
+                    command_runner.command, command_runner.args, pid
+                );
+            }
+            None => {
+                tracing::warn!(
+                    "Started stdio command process: {} with args: {:?}, but PID is not available (process may have exited quickly)",
+                    command_runner.command, command_runner.args
+                );
+            }
+        }
 
         Ok(child)
     }
