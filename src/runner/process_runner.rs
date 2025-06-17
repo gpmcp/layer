@@ -3,7 +3,9 @@ use gpmcp_domain::blueprint::ServerDefinition;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
-use crate::runner::{ProcessManager, ServiceCoordinator, TransportManager, TransportType};
+use crate::runner::process_manager::ProcessManager;
+use crate::runner::service_coordinator::ServiceCoordinator;
+use crate::runner::transport_manager::{TransportManager, TransportType};
 
 /// GpmcpRunner is the main entry point for managing MCP server connections.
 /// It coordinates between process management, transport handling, and service communication.
@@ -12,6 +14,10 @@ pub struct GpmcpRunner {
     process_manager: Option<ProcessManager>,
     cancellation_token: Arc<CancellationToken>,
 }
+
+// TODO: split into
+// - Service, where you can start and stop the runner -- we might not need this since this.
+// - ProcessManager functions so that we can have platform independent impls. 
 
 impl GpmcpRunner {
     /// Creates a new GpmcpRunner from a ServerDefinition.

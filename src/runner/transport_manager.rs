@@ -1,10 +1,9 @@
+use crate::runner::process_manager::ProcessManager;
 use anyhow::{Context, Result};
 use gpmcp_domain::blueprint::{Runner, ServerDefinition};
 use rmcp::transport::{ConfigureCommandExt, SseClientTransport, TokioChildProcess};
 use tokio::process::Command;
 use tracing::{info, warn};
-
-use super::ProcessManager;
 
 /// TransportType defines the different transport mechanisms available
 #[derive(Debug, Clone)]
@@ -25,7 +24,7 @@ impl TransportType {
     /// Returns true if this transport type needs a subprocess
     pub fn needs_subprocess(&self) -> bool {
         match self {
-            TransportType::Stdio => true,  // Stdio needs subprocess for communication
+            TransportType::Stdio => true, // Stdio needs subprocess for communication
             TransportType::Sse { .. } => true, // SSE needs subprocess to run the server
         }
     }
@@ -67,7 +66,9 @@ impl TransportManager {
     }
 
     /// Creates a stdio transport using TokioChildProcess
-    async fn create_stdio_transport(server_definition: ServerDefinition) -> Result<TransportVariant> {
+    async fn create_stdio_transport(
+        server_definition: ServerDefinition,
+    ) -> Result<TransportVariant> {
         let Runner::Stdio { command_runner } = &server_definition.runner else {
             return Err(anyhow::anyhow!("Expected stdio runner"));
         };
@@ -88,16 +89,16 @@ impl TransportManager {
 
         // Configure command for stdio communication and create transport
         let configured_cmd = cmd.configure(|_| {});
-        
+
         // Try to get PID information before creating transport
         info!(
             "Creating STDIO transport for command: {} with args: {:?}",
             command_runner.command, command_runner.args
         );
-        
-        let transport = TokioChildProcess::new(configured_cmd)
-            .context("Failed to create TokioChildProcess")?;
-            
+
+        let transport =
+            TokioChildProcess::new(configured_cmd).context("Failed to create TokioChildProcess")?;
+
         // Note: TokioChildProcess doesn't expose PID directly
         warn!(
             "STDIO transport created for command: {} - PID not accessible through TokioChildProcess interface",
@@ -110,10 +111,10 @@ impl TransportManager {
     /// Creates an SSE transport
     async fn create_sse_transport(
         url: String,
-        _process_manager: Option<&ProcessManager>,
+        process_manager: Option<&ProcessManager>,
     ) -> Result<TransportVariant> {
         // Wait a bit for the server to start up (if process manager started it)
-        if _process_manager.is_some() {
+        if process_manager.is_some() {
             tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
         }
 
@@ -135,8 +136,6 @@ impl TransportManager {
         self.transport
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -184,7 +183,7 @@ mod tests {
     #[tokio::test]
     async fn test_stdio_transport_creation() {
         let _ = tracing_subscriber::fmt::try_init();
-        
+
         let command_runner = CommandRunner {
             command: "echo".to_string(),
             args: vec!["hello".to_string()],

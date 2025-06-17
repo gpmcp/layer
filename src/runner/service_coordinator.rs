@@ -1,10 +1,9 @@
+use crate::runner::transport_manager::TransportManager;
 use anyhow::{Context, Result};
 use gpmcp_domain::blueprint::ServerDefinition;
 use rmcp::model::{ClientInfo, InitializeRequestParam};
-use rmcp::{service::RunningService, ServiceExt};
+use rmcp::{ServiceExt, service::RunningService};
 use tracing::info;
-
-use super::TransportManager;
 
 /// ServiceCoordinator manages the MCP service connection and provides
 /// a unified interface for all MCP operations
@@ -25,21 +24,17 @@ impl ServiceCoordinator {
 
         // Get the transport and create the service
         let transport = transport_manager.into_transport();
-        
+
         // Create the service using the appropriate transport
         let service = match transport {
-            super::transport_manager::TransportVariant::Stdio(stdio_transport) => {
-                client_info
-                    .serve(stdio_transport)
-                    .await
-                    .context("Failed to create stdio service")?
-            }
-            super::transport_manager::TransportVariant::Sse(sse_transport) => {
-                client_info
-                    .serve(sse_transport)
-                    .await
-                    .context("Failed to create SSE service")?
-            }
+            super::transport_manager::TransportVariant::Stdio(stdio_transport) => client_info
+                .serve(stdio_transport)
+                .await
+                .context("Failed to create stdio service")?,
+            super::transport_manager::TransportVariant::Sse(sse_transport) => client_info
+                .serve(sse_transport)
+                .await
+                .context("Failed to create SSE service")?,
         };
 
         info!("✅ Service coordinator created successfully");
@@ -124,7 +119,10 @@ impl ServiceCoordinator {
     /// Cancel the service
     pub async fn cancel(self) -> Result<()> {
         info!("Cancelling service coordinator");
-        self.service.cancel().await.context("Failed to cancel service")?;
+        self.service
+            .cancel()
+            .await
+            .context("Failed to cancel service")?;
         info!("Service coordinator cancelled successfully");
         Ok(())
     }
@@ -133,6 +131,7 @@ impl ServiceCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runner::transport_manager::TransportType;
     use gpmcp_domain::blueprint::{CommandRunner, Runner};
     use std::collections::HashMap;
 
@@ -156,21 +155,19 @@ mod tests {
         let client_info = ServiceCoordinator::create_client_info(&server_definition);
 
         assert_eq!(client_info.client_info.name, server_definition.package.name);
-        assert_eq!(client_info.client_info.version, server_definition.package.version);
+        assert_eq!(
+            client_info.client_info.version,
+            server_definition.package.version
+        );
     }
 
     #[tokio::test]
     async fn test_service_coordinator_creation() {
-        use super::super::{TransportManager, TransportType};
-
         let server_definition = create_test_server_definition();
         let transport_type = TransportType::from_runner(&server_definition.runner);
-        
-        let transport_manager = TransportManager::new(
-            transport_type,
-            server_definition.clone(),
-            None,
-        ).await;
+
+        let transport_manager =
+            TransportManager::new(transport_type, server_definition.clone(), None).await;
 
         match transport_manager {
             Ok(tm) => {
