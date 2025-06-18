@@ -31,18 +31,26 @@ impl GpmcpLayer {
             return None;
         }
 
+        // max_attempts is total attempts (initial + retries)
+        // backon's max_times is number of retries, so we subtract 1
+        let max_retries = if retry_config.max_attempts > 0 {
+            retry_config.max_attempts as usize - 1
+        } else {
+            0
+        };
+
         let strategy = if retry_config.use_exponential_backoff {
             ExponentialBuilder::default()
                 .with_min_delay(retry_config.min_delay())
                 .with_max_delay(retry_config.max_delay())
-                .with_max_times(retry_config.max_attempts as usize)
+                .with_max_times(max_retries)
                 .build()
         } else {
             // For fixed delay, use min_delay as the fixed interval
             ExponentialBuilder::default()
                 .with_min_delay(retry_config.min_delay())
                 .with_max_delay(retry_config.min_delay()) // Same as min for fixed delay
-                .with_max_times(retry_config.max_attempts as usize)
+                .with_max_times(max_retries)
                 .build()
         };
 
@@ -59,19 +67,10 @@ impl GpmcpLayer {
     {
         let retry_config = &self.runner_config.retry_config;
 
-        // If retries are disabled, just try once
-        let Some(retry_strategy) = self.create_retry_strategy() else {
-            if retry_config.retry_on_connection_failure {
-                self.ensure_connected_internal().await?;
-            }
-            return operation().await;
-        };
-
-        (|| async {
+        // Create the operation closure that handles connection management
+        let operation_with_connection = || async {
             // Try to ensure connection before each attempt
-            if retry_config.retry_on_connection_failure {
-                self.ensure_connected_internal().await?;
-            }
+            self.ensure_connected_internal().await?;
 
             // Attempt the operation
             operation().await.inspect_err(|_e| {
@@ -88,9 +87,14 @@ impl GpmcpLayer {
                     });
                 }
             })
-        })
-        .retry(retry_strategy)
-        .await
+        };
+
+        // If retries are disabled, try once (no retries, but still one attempt)
+        if let Some(retry_strategy) = self.create_retry_strategy() {
+            operation_with_connection.retry(retry_strategy).await
+        } else {
+            operation_with_connection().await
+        }
     }
 
     /// Internal connection management - ensures connection without retry logic

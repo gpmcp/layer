@@ -4,11 +4,11 @@ use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 use super::platform_factory::PlatformProcessManagerFactory;
-use gpmcp_core::process::{
-    ProcessHandle, ProcessId, ProcessManager as ProcessManagerTrait,
-    TerminationResult, ProcessManagerFactory,
-};
 use crate::RunnerConfig;
+use gpmcp_core::{
+    ProcessHandle, ProcessId, ProcessManager as ProcessManagerTrait, ProcessManagerFactory,
+    TerminationResult,
+};
 
 /// High-level process manager that wraps platform-specific implementations
 /// This is the main interface used by the MCP middleware
@@ -21,9 +21,7 @@ pub struct ProcessManager {
 
 impl ProcessManager {
     /// Create a new ProcessManager with platform-specific implementation
-    pub async fn new(
-        runner_config: &RunnerConfig,
-    ) -> Result<Self> {
+    pub async fn new(runner_config: &RunnerConfig) -> Result<Self> {
         let platform_manager = PlatformProcessManagerFactory::create_process_manager();
         info!(
             "Created ProcessManager with platform: {}",
@@ -175,5 +173,126 @@ impl Drop for ProcessManager {
                 }
             }
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{RetryConfig, Transport};
+    use std::collections::HashMap;
+
+    fn create_test_config() -> RunnerConfig {
+        RunnerConfig {
+            name: "test".to_string(),
+            version: "1.0.0".to_string(),
+            command: "echo".to_string(),
+            args: vec!["hello".to_string()],
+            env: HashMap::new(),
+            working_directory: None,
+            transport: Transport::Stdio,
+            retry_config: RetryConfig::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_manager_creation() {
+        let config = create_test_config();
+        let manager = ProcessManager::new(&config).await.unwrap();
+
+        // Verify manager was created successfully - just check that it exists
+        // The fact that ProcessManager::new() succeeded means the platform manager was created
+        assert_eq!(manager.runner_config.name, "test");
+    }
+
+    #[tokio::test]
+    async fn test_process_spawning() {
+        let config = create_test_config();
+        let manager = ProcessManager::new(&config).await.unwrap();
+
+        // Test spawning a simple process
+        #[cfg(unix)]
+        let handle = manager
+            .spawn_process("echo", &["test".to_string()], None, None)
+            .await
+            .unwrap();
+
+        #[cfg(windows)]
+        let handle = manager
+            .spawn_process(
+                "cmd",
+                &["/C".to_string(), "echo".to_string(), "test".to_string()],
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Verify process was spawned
+        assert!(handle.get_pid().is_some());
+
+        // Let process complete naturally
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_server_process_startup() {
+        let mut config = create_test_config();
+
+        // Use a simple command that will run briefly
+        #[cfg(unix)]
+        {
+            config.command = "sleep".to_string();
+            config.args = vec!["1".to_string()];
+        }
+
+        #[cfg(windows)]
+        {
+            config.command = "ping".to_string();
+            config.args = vec!["127.0.0.1".to_string(), "-n".to_string(), "1".to_string()];
+        }
+
+        let manager = ProcessManager::new(&config).await.unwrap();
+        let handle = manager.start_server().await.unwrap();
+
+        // Verify server process started
+        assert!(handle.get_pid().is_some());
+
+        // Wait a bit for process to complete
+        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+    }
+
+    #[tokio::test]
+    async fn test_process_manager_restart() {
+        let config = create_test_config();
+        let mut manager = ProcessManager::new(&config).await.unwrap();
+
+        // Test restart functionality
+        let result = manager.restart().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_functionality() {
+        let mut config = create_test_config();
+
+        // Use a longer-running process for cleanup testing
+        #[cfg(unix)]
+        {
+            config.command = "sleep".to_string();
+            config.args = vec!["5".to_string()];
+        }
+
+        #[cfg(windows)]
+        {
+            config.command = "ping".to_string();
+            config.args = vec!["127.0.0.1".to_string(), "-n".to_string(), "10".to_string()];
+        }
+
+        let manager = ProcessManager::new(&config).await.unwrap();
+        let _handle = manager.start_server().await.unwrap();
+
+        // Test cleanup
+        let result = manager.cleanup().await;
+        assert!(result.is_ok());
     }
 }

@@ -1,21 +1,15 @@
-//! Unix-specific process management implementation
-
-use gpmcp_core::process::*;
-
 mod unix_process_manager;
-mod unix_process_handle;
 
-pub use unix_process_manager::UnixProcessManager;
-pub use unix_process_handle::UnixProcessHandle;
+pub use unix_process_manager::{UnixProcessHandle, UnixProcessManager};
 
-/// Unix-specific process manager factory
 pub struct UnixProcessManagerFactory;
 
-impl ProcessManagerFactory for UnixProcessManagerFactory {
-    fn create_process_manager() -> Box<dyn ProcessManager> {
+impl gpmcp_core::ProcessManagerFactory for UnixProcessManagerFactory {
+    fn create_process_manager() -> Box<dyn gpmcp_core::ProcessManager> {
+        use gpmcp_core::ProcessManager;
         Box::new(UnixProcessManager::new())
     }
-    
+
     fn platform_name() -> &'static str {
         "Unix"
     }

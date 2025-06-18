@@ -1,5 +1,9 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use gpmcp_core::{
+    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus,
+    ProcessTermination, TerminationResult,
+};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid as NixPid;
 use std::collections::HashMap;
@@ -7,8 +11,6 @@ use std::time::Duration;
 use sysinfo::System;
 use tokio::process::{Child, Command};
 use tracing::{info, warn};
-
-use gpmcp_core::process::*;
 
 /// Unix-specific process handle implementation
 pub struct UnixProcessHandle {

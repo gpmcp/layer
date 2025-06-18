@@ -1,5 +1,5 @@
 use crate::RunnerConfig;
-use crate::error::GpmcpError;
+use crate::GpmcpError;
 use crate::runner::process_manager::ProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;

@@ -88,7 +88,7 @@ impl RetryConfig {
         Self {
             min_delay_ms: 0,
             max_delay_ms: 0,
-            max_attempts: 0,
+            max_attempts: 1, // One attempt, no retries
             use_exponential_backoff: false,
             jitter_factor: 0.0,
             retry_on_connection_failure: false,
@@ -131,9 +131,9 @@ impl RetryConfig {
         std::time::Duration::from_millis(self.max_delay_ms)
     }
 
-    /// Check if retries are enabled
+    /// Check if retries are enabled (more than 1 attempt)
     pub fn retries_enabled(&self) -> bool {
-        self.max_attempts > 0
+        self.max_attempts > 1
             && (self.retry_on_connection_failure || self.retry_on_operation_failure)
     }
 }
@@ -261,3 +261,29 @@ mod tests {
         assert_eq!(config.max_attempts, deserialized.max_attempts);
     }
 }
+    #[test]
+    fn test_no_retry_behavior() {
+        let config = RetryConfig::no_retry();
+        assert_eq!(config.max_attempts, 1);
+        assert!(!config.retries_enabled()); // No retries, but still 1 attempt
+        assert!(!config.retry_on_connection_failure);
+        assert!(!config.retry_on_operation_failure);
+    }
+
+    #[test]
+    fn test_retry_attempts_logic() {
+        // Test that max_attempts represents total attempts
+        let config = RetryConfig {
+            max_attempts: 3,
+            retry_on_connection_failure: true,
+            ..Default::default()
+        };
+        assert!(config.retries_enabled()); // 3 attempts = 1 initial + 2 retries
+        
+        let config = RetryConfig {
+            max_attempts: 1,
+            retry_on_connection_failure: true,
+            ..Default::default()
+        };
+        assert!(!config.retries_enabled()); // 1 attempt = no retries
+    }

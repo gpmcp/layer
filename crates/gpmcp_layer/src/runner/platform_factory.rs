@@ -1,4 +1,4 @@
-use gpmcp_core::process::{ProcessManager, ProcessManagerFactory};
+use gpmcp_core::{ProcessManager, ProcessManagerFactory};
 
 /// Platform-agnostic factory that selects the appropriate implementation at compile time
 pub struct PlatformProcessManagerFactory;
