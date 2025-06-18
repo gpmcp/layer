@@ -1,5 +1,7 @@
+use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Configuration for retry logic used throughout the application
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -120,19 +122,62 @@ impl RetryConfig {
     }
 
     /// Get the minimum delay as Duration
-    pub fn min_delay(&self) -> Duration {
-        Duration::from_millis(self.min_delay_ms)
+    pub fn min_delay(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.min_delay_ms)
     }
 
     /// Get the maximum delay as Duration
-    pub fn max_delay(&self) -> Duration {
-        Duration::from_millis(self.max_delay_ms)
+    pub fn max_delay(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.max_delay_ms)
     }
 
     /// Check if retries are enabled
     pub fn retries_enabled(&self) -> bool {
         self.max_attempts > 0
             && (self.retry_on_connection_failure || self.retry_on_operation_failure)
+    }
+}
+
+/// Transport configuration
+#[derive(Default, Debug, Clone, PartialEq)]
+pub enum Transport {
+    #[default]
+    Stdio,
+    Sse {
+        url: String,
+    },
+}
+
+/// Main runner configuration
+#[derive(Default, Debug, Clone, PartialEq, Builder)]
+#[builder(setter(into, strip_option))]
+pub struct RunnerConfig {
+    pub name: String,
+    pub version: String,
+    pub command: String,
+    #[builder(default)]
+    #[builder(setter(custom))]
+    pub args: Vec<String>,
+    #[builder(default)]
+    pub env: HashMap<String, String>,
+    #[builder(default)]
+    pub transport: Transport,
+    pub working_directory: Option<PathBuf>,
+    #[builder(default)]
+    pub retry_config: RetryConfig,
+}
+
+impl RunnerConfig {
+    pub fn builder() -> RunnerConfigBuilder {
+        RunnerConfigBuilder::default()
+    }
+}
+
+impl RunnerConfigBuilder {
+    pub fn args<S: ToString, I: IntoIterator<Item = S>>(&mut self, iter: I) -> &mut Self {
+        let args: Vec<String> = iter.into_iter().map(|s| s.to_string()).collect();
+        self.args = Some(args);
+        self
     }
 }
 

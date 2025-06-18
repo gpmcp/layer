@@ -8,10 +8,7 @@ use sysinfo::System;
 use tokio::process::{Child, Command};
 use tracing::{info, warn};
 
-use super::process_traits::{
-    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus,
-    ProcessTermination, TerminationResult,
-};
+use gpmcp_core::process::*;
 
 /// Unix-specific process handle implementation
 pub struct UnixProcessHandle {

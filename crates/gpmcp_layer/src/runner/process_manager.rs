@@ -5,10 +5,10 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use super::platform_factory::create_platform_process_manager;
-use super::process_traits::{
+use super::platform_factory::PlatformProcessManagerFactory;
+use gpmcp_core::process::{
     ProcessHandle, ProcessId, ProcessInfo, ProcessManager as ProcessManagerTrait, ProcessStatus,
-    TerminationResult,
+    TerminationResult, ProcessManagerFactory,
 };
 use crate::RunnerConfig;
 
@@ -28,10 +28,10 @@ impl ProcessManager {
         cancellation_token: Arc<CancellationToken>,
         runner_config: &RunnerConfig,
     ) -> Result<Self> {
-        let platform_manager = create_platform_process_manager();
+        let platform_manager = PlatformProcessManagerFactory::create_process_manager();
         info!(
             "Created ProcessManager with platform: {}",
-            super::platform_factory::platform_name()
+            PlatformProcessManagerFactory::platform_name()
         );
 
         Ok(Self {
@@ -244,7 +244,7 @@ impl ProcessManager {
         self.cleanup().await?;
 
         // Create a new platform manager
-        let platform_manager = create_platform_process_manager();
+        let platform_manager = PlatformProcessManagerFactory::create_process_manager();
         self.platform_manager = Arc::from(platform_manager);
 
         info!("ProcessManager restarted successfully");
@@ -343,6 +343,7 @@ impl Drop for ProcessManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Transport, RetryConfig};
     use tokio::time::sleep;
 
     fn create_test_runner_config() -> RunnerConfig {
@@ -353,8 +354,8 @@ mod tests {
             args: vec![],
             env: HashMap::new(),
             working_directory: None,
-            transport: crate::runner_config::Transport::Stdio,
-            retry_config: crate::retry_config::RetryConfig::default(),
+            transport: Transport::Stdio,
+            retry_config: RetryConfig::default(),
         }
     }
 

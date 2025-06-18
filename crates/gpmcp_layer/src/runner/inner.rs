@@ -150,7 +150,7 @@ impl GpmcpRunnerInner {
             .write()
             .await
             .as_mut()
-            .ok_or(GpmcpError::ProcessManagerNotFound)?
+            .ok_or(GpmcpError::ProcessError("Process manager not found".to_string()))?
             .restart()
             .await
             .context("Failed to restart process")?;

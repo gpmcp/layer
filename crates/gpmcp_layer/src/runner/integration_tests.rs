@@ -1,6 +1,7 @@
 use crate::RunnerConfig;
 use crate::runner::process_manager::ProcessManager;
 use crate::runner::transport_manager::TransportManager;
+use crate::{Transport, RetryConfig};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -15,10 +16,10 @@ async fn test_sse_transport_starts_server_process() {
         args: vec!["10".to_string()],
         env: HashMap::new(),
         working_directory: None,
-        transport: crate::runner_config::Transport::Sse {
+        transport: Transport::Sse {
             url: "http://localhost:8080/sse".to_string(),
         },
-        retry_config: crate::retry_config::RetryConfig::default(),
+        retry_config: RetryConfig::default(),
     };
 
     let process_manager = ProcessManager::new(cancellation_token.clone(), &config)
@@ -58,8 +59,8 @@ async fn test_manual_server_start() {
         args: vec!["5".to_string()],
         env: HashMap::new(),
         working_directory: None,
-        transport: crate::runner_config::Transport::Stdio,
-        retry_config: crate::retry_config::RetryConfig::default(),
+        transport: Transport::Stdio,
+        retry_config: RetryConfig::default(),
     };
 
     let process_manager = ProcessManager::new(cancellation_token, &config)

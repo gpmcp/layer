@@ -1,43 +1,41 @@
-use super::process_traits::ProcessManager;
+use gpmcp_core::process::{ProcessManager, ProcessManagerFactory};
 
-#[cfg(unix)]
-use super::unix_process_manager::UnixProcessManager;
-#[cfg(windows)]
-use super::windows_process_manager::WindowsProcessManager;
+/// Platform-agnostic factory that selects the appropriate implementation at compile time
+pub struct PlatformProcessManagerFactory;
 
-/// Factory function to create the appropriate process manager for the current platform
-pub fn create_platform_process_manager() -> Box<dyn ProcessManager> {
-    #[cfg(unix)]
-    {
-        Box::new(UnixProcessManager::new())
+impl ProcessManagerFactory for PlatformProcessManagerFactory {
+    fn create_process_manager() -> Box<dyn ProcessManager> {
+        #[cfg(unix)]
+        {
+            gpmcp_unix::UnixProcessManagerFactory::create_process_manager()
+        }
+
+        #[cfg(windows)]
+        {
+            gpmcp_windows::WindowsProcessManagerFactory::create_process_manager()
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            compile_error!("Unsupported platform: only Unix and Windows are currently supported");
+        }
     }
+    
+    fn platform_name() -> &'static str {
+        #[cfg(unix)]
+        {
+            gpmcp_unix::UnixProcessManagerFactory::platform_name()
+        }
 
-    #[cfg(windows)]
-    {
-        Box::new(WindowsProcessManager::new())
-    }
+        #[cfg(windows)]
+        {
+            gpmcp_windows::WindowsProcessManagerFactory::platform_name()
+        }
 
-    #[cfg(not(any(unix, windows)))]
-    {
-        compile_error!("Unsupported platform: only Unix and Windows are currently supported");
-    }
-}
-
-/// Get the platform name for logging and debugging
-pub fn platform_name() -> &'static str {
-    #[cfg(unix)]
-    {
-        "Unix"
-    }
-
-    #[cfg(windows)]
-    {
-        "Windows"
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        "Unknown"
+        #[cfg(not(any(unix, windows)))]
+        {
+            "Unknown"
+        }
     }
 }
 
@@ -47,10 +45,10 @@ mod tests {
 
     #[test]
     fn test_platform_detection() {
-        let platform = platform_name();
+        let platform = PlatformProcessManagerFactory::platform_name();
         println!("Running on platform: {}", platform);
 
         // Ensure we can create platform-specific managers
-        let _process_manager = create_platform_process_manager();
+        let _process_manager = PlatformProcessManagerFactory::create_process_manager();
     }
 }
