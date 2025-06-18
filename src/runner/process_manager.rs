@@ -47,11 +47,7 @@ impl ProcessManager {
         info!("Starting server process from configuration");
 
         let config = &self.runner_config;
-        let working_dir = config
-            .working_directory
-            .as_ref()
-            .map(|p| p.to_str())
-            .flatten();
+        let working_dir = config.working_directory.as_ref().and_then(|p| p.to_str());
 
         self.spawn_process(
             &config.command,
@@ -88,7 +84,7 @@ impl ProcessManager {
             .platform_manager
             .spawn_process(command, args, working_dir, &env)
             .await
-            .with_context(|| format!("Failed to spawn process: {}", command))?;
+            .with_context(|| format!("Failed to spawn process: {command}"))?;
 
         // Track the process
         if let Some(pid) = handle.get_pid() {

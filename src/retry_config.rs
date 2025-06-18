@@ -195,9 +195,11 @@ mod tests {
 
     #[test]
     fn test_invalid_config() {
-        let mut config = RetryConfig::default();
-        config.min_delay_ms = 1000;
-        config.max_delay_ms = 500;
+        let mut config = RetryConfig {
+            min_delay_ms: 1000,
+            max_delay_ms: 500,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
         config.min_delay_ms = 100;

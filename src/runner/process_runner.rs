@@ -74,7 +74,7 @@ impl GpmcpRunner {
             }
 
             // Attempt the operation
-            operation().await.map_err(|e| {
+            operation().await.inspect_err(|_e| {
                 // Clear connection on failure if operation retries are enabled
                 if retry_config.retry_on_operation_failure {
                     tokio::spawn({
@@ -87,7 +87,6 @@ impl GpmcpRunner {
                         }
                     });
                 }
-                e
             })
         })
         .retry(retry_strategy)

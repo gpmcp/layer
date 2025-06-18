@@ -112,7 +112,7 @@ impl ProcessLifecycle for UnixProcessManager {
 
         let child = cmd
             .spawn()
-            .with_context(|| format!("Failed to spawn process: {}", command))?;
+            .with_context(|| format!("Failed to spawn process: {command}"))?;
 
         // Log successful process creation
         if let Some(pid) = child.id() {
@@ -187,7 +187,7 @@ impl ProcessTermination for UnixProcessManager {
                 }
                 Err(e) => {
                     warn!("Failed to send SIGTERM to process {}: {}", pid.0, e);
-                    TerminationResult::Failed(format!("SIGTERM failed: {}", e))
+                    TerminationResult::Failed(format!("SIGTERM failed: {e}"))
                 }
             }
         } else {
@@ -218,7 +218,7 @@ impl ProcessTermination for UnixProcessManager {
                 }
                 Err(e) => {
                     warn!("Failed to send SIGKILL to process {}: {}", pid.0, e);
-                    TerminationResult::Failed(format!("SIGKILL failed: {}", e))
+                    TerminationResult::Failed(format!("SIGKILL failed: {e}"))
                 }
             }
         } else {
@@ -235,7 +235,7 @@ impl ProcessTermination for UnixProcessManager {
         );
 
         let mut children = Vec::new();
-        self.find_children_recursive(&system, parent_pid.0, &mut children);
+        Self::find_children_recursive(&system, parent_pid.0, &mut children);
 
         Ok(children.into_iter().map(ProcessId::from).collect())
     }
@@ -251,7 +251,7 @@ impl ProcessTermination for UnixProcessManager {
                     "Failed to find child processes for PID {}: {}",
                     root_pid.0, e
                 );
-                return TerminationResult::Failed(format!("Failed to enumerate children: {}", e));
+                return TerminationResult::Failed(format!("Failed to enumerate children: {e}"));
             }
         };
 
@@ -301,7 +301,7 @@ impl ProcessTermination for UnixProcessManager {
                     }
                     Err(e) => {
                         warn!("Failed to send SIGKILL to process group {}: {}", pid.0, e);
-                        TerminationResult::Failed(format!("SIGKILL to process group failed: {}", e))
+                        TerminationResult::Failed(format!("SIGKILL to process group failed: {e}"))
                     }
                 }
             }
@@ -315,7 +315,7 @@ impl ProcessTermination for UnixProcessManager {
             }
             Err(e) => {
                 warn!("Failed to send SIGTERM to process group {}: {}", pid.0, e);
-                TerminationResult::Failed(format!("SIGTERM to process group failed: {}", e))
+                TerminationResult::Failed(format!("SIGTERM to process group failed: {e}"))
             }
         }
     }
@@ -346,7 +346,7 @@ impl UnixProcessManager {
                     }
                     Err(e) => {
                         warn!("Failed to kill process {}: {}", pid.0, e);
-                        TerminationResult::Failed(format!("SIGKILL failed: {}", e))
+                        TerminationResult::Failed(format!("SIGKILL failed: {e}"))
                     }
                 }
             }
@@ -359,20 +359,20 @@ impl UnixProcessManager {
                 TerminationResult::AccessDenied
             }
             Err(e) => {
-                warn!("Failed to send SIGTERM to process {}: {}", pid.0, e);
-                TerminationResult::Failed(format!("SIGTERM failed: {}", e))
+                warn!("Failed to send SIGTERM to process {}: {e}", pid.0,);
+                TerminationResult::Failed(format!("SIGTERM failed: {e}",))
             }
         }
     }
 
     /// Recursively find all child processes
-    fn find_children_recursive(&self, system: &System, parent_pid: u32, result: &mut Vec<u32>) {
+    fn find_children_recursive(system: &System, parent_pid: u32, result: &mut Vec<u32>) {
         for (pid, process) in system.processes() {
             if let Some(ppid) = process.parent() {
                 if ppid.as_u32() == parent_pid {
                     let child_pid = pid.as_u32();
                     // Recursively find grandchildren first
-                    self.find_children_recursive(system, child_pid, result);
+                    Self::find_children_recursive(system, child_pid, result);
                     // Then add this child
                     result.push(child_pid);
                 }
