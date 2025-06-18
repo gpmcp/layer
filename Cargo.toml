@@ -8,17 +8,9 @@ tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-axum = "0.7"
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors"] }
-futures = "0.3"
-uuid = { version = "1.0", features = ["v4"] }
-clap = { version = "4.0", features = ["derive"] }
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-async-stream = "0.3"
-chrono = { version = "0.4", features = ["serde"] }
 sysinfo = "0.32"
 nix = { version = "0.29", features = ["signal", "process"] }
 rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", rev = "a66f66ae345a0fafde1e2ee496ec137d77aef82a", features = [
@@ -31,18 +23,9 @@ rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", rev = "a66f66
     "transport-sse-server",
     "transport-streamable-http-server",
 ] }
-gpmcp_domain = { path = "../gpmcp/crates/gpmcp_domain" }
 derive_builder = "0.20.2"
 tokio-util = "0.7.15"
-hyper = { version = "1.0", features = ["full"] }
-hyper-util = { version = "0.1", features = ["full"] }
-http-body-util = "0.1"
 reqwest = { version = "0.12", features = ["json", "stream"] }
-eventsource-stream = "0.2"
-futures-util = "0.3"
-bytes = "1.0"
 async-trait = "0.1"
-derive_setters = "0.1.7"
-async-recursion = "1.1.1"
 thiserror = "2.0.12"
 backon = "1.2"
