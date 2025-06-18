@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use gpmcp_core::{
+use gpmcp_layer_core::{
     ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus,
     ProcessTermination, TerminationResult,
 };

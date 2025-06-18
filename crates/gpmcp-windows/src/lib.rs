@@ -7,9 +7,9 @@ pub use windows_process_manager::WindowsProcessManager;
 /// Windows-specific process manager factory
 pub struct WindowsProcessManagerFactory;
 
-impl gpmcp_core::ProcessManagerFactory for WindowsProcessManagerFactory {
-    fn create_process_manager() -> Box<dyn gpmcp_core::ProcessManager> {
-        use gpmcp_core::ProcessManager;
+impl gpmcp_layer_core::ProcessManagerFactory for WindowsProcessManagerFactory {
+    fn create_process_manager() -> Box<dyn gpmcp_layer_core::ProcessManager> {
+        use gpmcp_layer_core::ProcessManager;
         Box::new(WindowsProcessManager::new())
     }
 

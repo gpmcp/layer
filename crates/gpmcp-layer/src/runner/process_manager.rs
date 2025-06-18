@@ -5,7 +5,7 @@ use tracing::{debug, error, info, warn};
 
 use super::platform_factory::PlatformProcessManagerFactory;
 use crate::RunnerConfig;
-use gpmcp_core::{
+use gpmcp_layer_core::{
     ProcessHandle, ProcessId, ProcessManager as ProcessManagerTrait, ProcessManagerFactory,
     TerminationResult,
 };

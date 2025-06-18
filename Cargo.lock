@@ -505,7 +505,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpmcp_core"
+name = "gpmcp-layer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "backon",
+ "gpmcp-layer-core",
+ "gpmcp-layer-unix",
+ "gpmcp-layer-windows",
+ "nix",
+ "reqwest",
+ "rmcp",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "gpmcp-layer-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -518,30 +536,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpmcp_layer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "backon",
- "gpmcp_core",
- "gpmcp_unix",
- "gpmcp_windows",
- "nix",
- "reqwest",
- "rmcp",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "gpmcp_unix"
+name = "gpmcp-layer-unix"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "gpmcp_core",
+ "gpmcp-layer-core",
  "nix",
  "sysinfo",
  "tokio",
@@ -549,12 +549,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpmcp_windows"
+name = "gpmcp-layer-windows"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "gpmcp_core",
+ "gpmcp-layer-core",
  "sysinfo",
  "tokio",
  "tracing",

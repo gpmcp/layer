@@ -1,10 +1,10 @@
 [package]
-name = "gpmcp_unix"
+name = "gpmcp-layer-unix"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-gpmcp_core = { path = "../gpmcp_core" }
+gpmcp-layer-core = { path = "../gpmcp-layer-core" }
 tokio = { version = "1.0", features = ["full"] }
 anyhow = "1.0"
 tracing = "0.1"

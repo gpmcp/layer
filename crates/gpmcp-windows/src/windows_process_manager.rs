@@ -6,7 +6,7 @@ use sysinfo::System;
 use tokio::process::{Child, Command};
 use tracing::{info, warn};
 
-use gpmcp_core::*;
+use gpmcp_layer_core::*;
 
 /// Windows-specific process handle implementation
 pub struct WindowsProcessHandle {
