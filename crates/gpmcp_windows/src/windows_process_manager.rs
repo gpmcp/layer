@@ -112,7 +112,6 @@ impl ProcessLifecycle for WindowsProcessManager {
         // a new console for better process management
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x00000010); // CREATE_NEW_CONSOLE
         }
 
