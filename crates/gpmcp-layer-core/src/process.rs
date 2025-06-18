@@ -179,7 +179,7 @@ pub trait ProcessManager: ProcessLifecycle + ProcessTermination {
 pub trait ProcessManagerFactory {
     /// Create a process manager for the current platform
     fn create_process_manager() -> Box<dyn ProcessManager>;
-    
+
     /// Get the platform name for logging and debugging
     fn platform_name() -> &'static str;
 }

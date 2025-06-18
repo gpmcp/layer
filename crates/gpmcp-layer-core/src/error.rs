@@ -59,7 +59,7 @@ mod tests {
     fn test_error_creation() {
         let error = GpmcpError::ProcessError("test command".to_string());
         assert!(!error.is_retryable()); // ProcessError is not retryable
-        
+
         let error = GpmcpError::ConfigurationError("invalid config".to_string());
         assert!(!error.is_retryable());
     }
@@ -69,7 +69,7 @@ mod tests {
         let error = GpmcpError::ProcessError("test".to_string());
         let display = format!("{}", error);
         assert!(display.contains("Process management error"));
-        
+
         let error = GpmcpError::TransportError("connection failed".to_string());
         let display = format!("{}", error);
         assert!(display.contains("Transport error"));
@@ -81,7 +81,7 @@ mod tests {
         assert!(GpmcpError::ConnectionFailed("test".to_string()).is_retryable());
         assert!(GpmcpError::TransportError("test".to_string()).is_retryable());
         assert!(GpmcpError::Timeout("test".to_string()).is_retryable());
-        
+
         // Non-retryable errors
         assert!(!GpmcpError::ConfigurationError("test".to_string()).is_retryable());
         assert!(!GpmcpError::ProcessError("test".to_string()).is_retryable());

@@ -304,7 +304,9 @@ mod unix_impl {
                         }
                         Err(e) => {
                             warn!("Failed to send SIGKILL to process group {}: {}", pid.0, e);
-                            TerminationResult::Failed(format!("SIGKILL to process group failed: {e}"))
+                            TerminationResult::Failed(format!(
+                                "SIGKILL to process group failed: {e}"
+                            ))
                         }
                     }
                 }

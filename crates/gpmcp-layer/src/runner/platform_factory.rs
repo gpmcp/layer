@@ -20,7 +20,7 @@ impl ProcessManagerFactory for PlatformProcessManagerFactory {
             compile_error!("Unsupported platform: only Unix and Windows are currently supported");
         }
     }
-    
+
     fn platform_name() -> &'static str {
         #[cfg(unix)]
         {

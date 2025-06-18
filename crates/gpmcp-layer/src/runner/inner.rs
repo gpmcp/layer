@@ -1,5 +1,5 @@
-use crate::RunnerConfig;
 use crate::GpmcpError;
+use crate::RunnerConfig;
 use crate::runner::process_manager::ProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;
@@ -33,8 +33,7 @@ impl GpmcpRunnerInner {
         // Determine transport type and create appropriate managers
 
         // Create process manager if needed (for commands that need subprocess)
-        let process_manager =
-            ProcessManager::new(&self.runner_config).await?;
+        let process_manager = ProcessManager::new(&self.runner_config).await?;
 
         // For SSE transport, start the server process first
         if matches!(self.runner_config.transport, crate::Transport::Sse { .. }) {
@@ -150,7 +149,9 @@ impl GpmcpRunnerInner {
             .write()
             .await
             .as_mut()
-            .ok_or(GpmcpError::ProcessError("Process manager not found".to_string()))?
+            .ok_or(GpmcpError::ProcessError(
+                "Process manager not found".to_string(),
+            ))?
             .restart()
             .await
             .context("Failed to restart process")?;

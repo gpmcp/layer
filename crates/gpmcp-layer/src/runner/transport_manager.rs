@@ -68,7 +68,7 @@ impl TransportManager {
     /// Creates an SSE transport with server readiness polling
     async fn create_sse_transport(url: impl ToString) -> Result<TransportVariant> {
         let url_string = url.to_string();
-        
+
         // Poll the server to check if it's ready using list_tools request
         // Use shorter timeout for faster failure in test environments
         Self::poll_server_readiness(&url_string, 10, 100).await?;
@@ -83,8 +83,11 @@ impl TransportManager {
 
     /// Poll the server readiness by attempting to connect and call list_tools
     async fn poll_server_readiness(url: &str, max_attempts: u32, interval_ms: u64) -> Result<()> {
-        info!("Polling server readiness at {} (max {} attempts, {}ms interval)", url, max_attempts, interval_ms);
-        
+        info!(
+            "Polling server readiness at {} (max {} attempts, {}ms interval)",
+            url, max_attempts, interval_ms
+        );
+
         for attempt in 1..=max_attempts {
             // Try to create a temporary transport and test connectivity
             match Self::test_server_connectivity(url).await {
@@ -105,20 +108,20 @@ impl TransportManager {
                 }
             }
         }
-        
+
         Err(anyhow::anyhow!("Server polling failed unexpectedly"))
     }
-    
+
     /// Test server connectivity by creating a temporary connection and calling list_tools
     async fn test_server_connectivity(url: &str) -> Result<()> {
-        use rmcp::model::ClientInfo;
         use rmcp::ServiceExt;
-        
+        use rmcp::model::ClientInfo;
+
         // Create a temporary SSE transport for testing
         let test_transport = SseClientTransport::start(url.to_string())
             .await
             .context("Failed to create test SSE transport")?;
-        
+
         // Create minimal client info for testing
         let client_info = ClientInfo {
             protocol_version: rmcp::model::ProtocolVersion::default(),
@@ -128,25 +131,25 @@ impl TransportManager {
                 version: "0.1.0".to_string(),
             },
         };
-        
+
         // Try to establish service and call list_tools
         let service = client_info
             .serve(test_transport)
             .await
             .context("Failed to create test service")?;
-            
+
         // Call list_tools to verify server is responding
         let _result = service
             .list_tools(Default::default())
             .await
             .context("Server not responding to list_tools")?;
-            
+
         // Cancel the test service
         service
             .cancel()
             .await
             .context("Failed to cancel test service")?;
-            
+
         Ok(())
     }
 

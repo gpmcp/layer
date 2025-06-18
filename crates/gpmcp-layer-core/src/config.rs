@@ -261,29 +261,29 @@ mod tests {
         assert_eq!(config.max_attempts, deserialized.max_attempts);
     }
 }
-    #[test]
-    fn test_no_retry_behavior() {
-        let config = RetryConfig::no_retry();
-        assert_eq!(config.max_attempts, 1);
-        assert!(!config.retries_enabled()); // No retries, but still 1 attempt
-        assert!(!config.retry_on_connection_failure);
-        assert!(!config.retry_on_operation_failure);
-    }
+#[test]
+fn test_no_retry_behavior() {
+    let config = RetryConfig::no_retry();
+    assert_eq!(config.max_attempts, 1);
+    assert!(!config.retries_enabled()); // No retries, but still 1 attempt
+    assert!(!config.retry_on_connection_failure);
+    assert!(!config.retry_on_operation_failure);
+}
 
-    #[test]
-    fn test_retry_attempts_logic() {
-        // Test that max_attempts represents total attempts
-        let config = RetryConfig {
-            max_attempts: 3,
-            retry_on_connection_failure: true,
-            ..Default::default()
-        };
-        assert!(config.retries_enabled()); // 3 attempts = 1 initial + 2 retries
-        
-        let config = RetryConfig {
-            max_attempts: 1,
-            retry_on_connection_failure: true,
-            ..Default::default()
-        };
-        assert!(!config.retries_enabled()); // 1 attempt = no retries
-    }
+#[test]
+fn test_retry_attempts_logic() {
+    // Test that max_attempts represents total attempts
+    let config = RetryConfig {
+        max_attempts: 3,
+        retry_on_connection_failure: true,
+        ..Default::default()
+    };
+    assert!(config.retries_enabled()); // 3 attempts = 1 initial + 2 retries
+
+    let config = RetryConfig {
+        max_attempts: 1,
+        retry_on_connection_failure: true,
+        ..Default::default()
+    };
+    assert!(!config.retries_enabled()); // 1 attempt = no retries
+}
