@@ -505,6 +505,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpmcp_layer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "backon",
+ "derive_builder",
+ "nix 0.29.0",
+ "reqwest",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "h2"
 version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -832,27 +853,6 @@ checksum = "1cfaf33c695fc6e08064efbc1f72ec937429614f25eef83af942d0e227c3a28f"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "layer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "backon",
- "derive_builder",
- "nix 0.29.0",
- "reqwest",
- "rmcp",
- "serde",
- "serde_json",
- "sysinfo",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
