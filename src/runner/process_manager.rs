@@ -398,6 +398,17 @@ impl ProcessManager {
 
         Ok(())
     }
+
+    /// Cleanup the process manager
+    pub async fn cleanup(mut self) -> Result<()> {
+        info!("Cleaning up ProcessManager");
+
+        // Stop the process
+        self.stop_process().await?;
+
+        info!("ProcessManager cleanup completed");
+        Ok(())
+    }
 }
 
 impl Drop for ProcessManager {

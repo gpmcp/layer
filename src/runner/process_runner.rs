@@ -111,6 +111,14 @@ impl GpmcpRunner {
 
         Ok(())
     }
+    
+    pub async fn cancel(self) -> Result<()> {
+        let mut lock = self.inner.lock().await;
+        if let Some(inner) = lock.take() {
+            inner.cancel().await.context("Failed to cancel GpmcpRunner")?;
+        }
+        Ok(())
+    }
 
     pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult> {
         self.attempt_with_retry(|| async {

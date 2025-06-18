@@ -115,4 +115,15 @@ impl ServiceCoordinator {
     pub fn peer_info(&self) -> Option<&rmcp::model::ServerInfo> {
         self.service.peer_info()
     }
+
+    /// Cancel the service
+    pub async fn cancel(self) -> Result<()> {
+        info!("Cancelling service coordinator");
+        self.service
+            .cancel()
+            .await
+            .context("Failed to cancel service")?;
+        info!("Service coordinator cancelled successfully");
+        Ok(())
+    }
 }

@@ -9,8 +9,11 @@ pub struct RunnerConfig {
     pub name: String,
     pub version: String,
     pub command: String,
+    #[builder(default)]
     pub args: Vec<String>,
+    #[builder(default)]
     pub env: HashMap<String, String>,
+    #[builder(default)]
     pub transport: Transport,
     pub working_directory: Option<PathBuf>,
     #[builder(default)]

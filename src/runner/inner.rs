@@ -151,4 +151,30 @@ impl GpmcpRunnerInner {
         info!("Process restarted successfully");
         Ok(())
     }
+
+    pub async fn cancel(self) -> anyhow::Result<()> {
+        info!("Cancelling GpmcpRunner");
+
+        // Destructure self to move out the components
+        let GpmcpRunnerInner {
+            cancellation_token,
+            service_coordinator,
+            process_manager,
+            ..
+        } = self;
+        cancellation_token.cancel();
+
+        // Cancel service first
+        if let Some(coordinator) = service_coordinator.write().await.take() {
+            coordinator.cancel().await.ok();
+        }
+
+        // Then cleanup process if exists
+        if let Some(manager) = process_manager.write().await.take() {
+            manager.cleanup().await.ok();
+        }
+
+        info!("GpmcpRunner cancelled successfully");
+        Ok(())
+    }
 }
