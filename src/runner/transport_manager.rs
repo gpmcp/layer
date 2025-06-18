@@ -15,7 +15,7 @@ pub enum TransportVariant {
 }
 
 impl TransportManager {
-    /// Creates a new TransportManager 
+    /// Creates a new TransportManager
     pub async fn new(runner_config: &RunnerConfig) -> Result<Self> {
         let transport = match &runner_config.transport {
             Transport::Stdio => {

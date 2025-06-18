@@ -5,8 +5,8 @@ mod service_coordinator;
 mod transport_manager;
 
 // Process management traits and platform-specific implementations
-mod process_traits;
 mod platform_factory;
+mod process_traits;
 
 #[cfg(unix)]
 mod unix_process_manager;
@@ -22,6 +22,6 @@ mod integration_tests;
 mod sse_test;
 
 // Public exports
-pub use process_runner::*;
 pub use process_manager::ProcessManager;
+pub use process_runner::*;
 pub use process_traits::{ProcessHandle, ProcessId, ProcessInfo, ProcessStatus, TerminationResult};

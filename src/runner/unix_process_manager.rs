@@ -9,8 +9,8 @@ use tokio::process::{Child, Command};
 use tracing::{info, warn};
 
 use super::process_traits::{
-    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, 
-    ProcessStatus, ProcessTermination, TerminationResult
+    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus,
+    ProcessTermination, TerminationResult,
 };
 
 /// Unix-specific process handle implementation
@@ -22,7 +22,11 @@ pub struct UnixProcessHandle {
 
 impl UnixProcessHandle {
     pub fn new(child: Child, command: String, args: Vec<String>) -> Self {
-        Self { child, command, args }
+        Self {
+            child,
+            command,
+            args,
+        }
     }
 }
 
@@ -31,15 +35,15 @@ impl ProcessHandle for UnixProcessHandle {
     fn get_pid(&self) -> Option<ProcessId> {
         self.child.id().map(ProcessId::from)
     }
-    
+
     fn get_command(&self) -> &str {
         &self.command
     }
-    
+
     fn get_args(&self) -> &[String] {
         &self.args
     }
-    
+
     async fn is_running(&self) -> bool {
         if let Some(pid) = self.get_pid() {
             let nix_pid = NixPid::from_raw(pid.0 as i32);
@@ -49,21 +53,24 @@ impl ProcessHandle for UnixProcessHandle {
             false
         }
     }
-    
+
     async fn try_wait(&mut self) -> Result<Option<ProcessStatus>> {
         match self.child.try_wait()? {
             Some(status) => Ok(Some(ProcessStatus::Exited(status))),
             None => Ok(None),
         }
     }
-    
+
     async fn wait(&mut self) -> Result<ProcessStatus> {
         let status = self.child.wait().await?;
         Ok(ProcessStatus::Exited(status))
     }
-    
+
     async fn kill(&mut self) -> Result<()> {
-        self.child.kill().await.map_err(|e| anyhow::anyhow!("Failed to kill process: {}", e))
+        self.child
+            .kill()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to kill process: {}", e))
     }
 }
 
@@ -89,48 +96,54 @@ impl ProcessLifecycle for UnixProcessManager {
     ) -> Result<Box<dyn ProcessHandle>> {
         let mut cmd = Command::new(command);
         cmd.args(args);
-        
+
         // Set working directory
         if let Some(dir) = working_dir {
             cmd.current_dir(dir);
         }
-        
+
         // Set environment variables
         for (key, value) in env {
             cmd.env(key, value);
         }
-        
+
         // Create new process group for better process tree management
         cmd.process_group(0);
-        
-        let child = cmd.spawn()
+
+        let child = cmd
+            .spawn()
             .with_context(|| format!("Failed to spawn process: {}", command))?;
-        
+
         // Log successful process creation
         if let Some(pid) = child.id() {
-            info!("Spawned Unix process: {} (PID: {}) with args: {:?}", command, pid, args);
+            info!(
+                "Spawned Unix process: {} (PID: {}) with args: {:?}",
+                command, pid, args
+            );
         }
-        
+
         Ok(Box::new(UnixProcessHandle::new(
             child,
             command.to_string(),
             args.to_vec(),
         )))
     }
-    
+
     async fn is_process_healthy(&self, handle: &dyn ProcessHandle) -> bool {
         handle.is_running().await
     }
-    
+
     async fn get_process_info(&self, handle: &dyn ProcessHandle) -> Result<ProcessInfo> {
-        let pid = handle.get_pid().ok_or_else(|| anyhow::anyhow!("Process has no PID"))?;
-        
+        let pid = handle
+            .get_pid()
+            .ok_or_else(|| anyhow::anyhow!("Process has no PID"))?;
+
         let status = if handle.is_running().await {
             ProcessStatus::Running
         } else {
             ProcessStatus::Terminated
         };
-        
+
         Ok(ProcessInfo {
             pid,
             status,
@@ -138,18 +151,16 @@ impl ProcessLifecycle for UnixProcessManager {
             args: handle.get_args().to_vec(),
         })
     }
-    
+
     async fn wait_for_exit(
         &self,
         handle: &mut dyn ProcessHandle,
         timeout: Option<Duration>,
     ) -> Result<ProcessStatus> {
         match timeout {
-            Some(duration) => {
-                tokio::time::timeout(duration, handle.wait())
-                    .await
-                    .map_err(|_| anyhow::anyhow!("Timeout waiting for process exit"))?
-            }
+            Some(duration) => tokio::time::timeout(duration, handle.wait())
+                .await
+                .map_err(|_| anyhow::anyhow!("Timeout waiting for process exit"))?,
             None => handle.wait().await,
         }
     }
@@ -160,7 +171,7 @@ impl ProcessTermination for UnixProcessManager {
     async fn terminate_gracefully(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
         if let Some(pid) = handle.get_pid() {
             let nix_pid = NixPid::from_raw(pid.0 as i32);
-            
+
             match signal::kill(nix_pid, Signal::SIGTERM) {
                 Ok(()) => {
                     info!("Sent SIGTERM to process {}", pid.0);
@@ -183,11 +194,11 @@ impl ProcessTermination for UnixProcessManager {
             TerminationResult::ProcessNotFound
         }
     }
-    
+
     async fn force_kill(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
         if let Some(pid) = handle.get_pid() {
             let nix_pid = NixPid::from_raw(pid.0 as i32);
-            
+
             match signal::kill(nix_pid, Signal::SIGKILL) {
                 Ok(()) => {
                     info!("Sent SIGKILL to process {}", pid.0);
@@ -214,64 +225,70 @@ impl ProcessTermination for UnixProcessManager {
             TerminationResult::ProcessNotFound
         }
     }
-    
+
     async fn find_child_processes(&self, parent_pid: ProcessId) -> Result<Vec<ProcessId>> {
         let mut system = self.system.lock().unwrap();
         system.refresh_processes_specifics(
             sysinfo::ProcessesToUpdate::All,
             true,
-            sysinfo::ProcessRefreshKind::new(),
+            sysinfo::ProcessRefreshKind::default(),
         );
-        
+
         let mut children = Vec::new();
         self.find_children_recursive(&system, parent_pid.0, &mut children);
-        
+
         Ok(children.into_iter().map(ProcessId::from).collect())
     }
-    
+
     async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {
         info!("Terminating process tree for root PID {}", root_pid.0);
-        
+
         // Find all child processes
         let children = match self.find_child_processes(root_pid).await {
             Ok(children) => children,
             Err(e) => {
-                warn!("Failed to find child processes for PID {}: {}", root_pid.0, e);
+                warn!(
+                    "Failed to find child processes for PID {}: {}",
+                    root_pid.0, e
+                );
                 return TerminationResult::Failed(format!("Failed to enumerate children: {}", e));
             }
         };
-        
+
         if children.is_empty() {
             info!("No child processes found for PID {}", root_pid.0);
         } else {
             info!("Found {} child processes to terminate", children.len());
-            
+
             // Terminate children first (bottom-up approach)
             for child_pid in children.iter().rev() {
                 match self.terminate_single_process(*child_pid).await {
                     TerminationResult::Success | TerminationResult::ProcessNotFound => {}
                     result => {
-                        warn!("Failed to terminate child process {}: {:?}", child_pid.0, result);
+                        warn!(
+                            "Failed to terminate child process {}: {:?}",
+                            child_pid.0, result
+                        );
                     }
                 }
             }
         }
-        
+
         // Finally terminate the root process
         self.terminate_single_process(root_pid).await
     }
-    
+
     async fn terminate_process_group(&self, pid: ProcessId) -> TerminationResult {
         let pgid = NixPid::from_raw(pid.0 as i32);
-        
+
         // Try SIGTERM first for graceful shutdown
         match signal::killpg(pgid, Signal::SIGTERM) {
             Ok(()) => {
                 info!("Sent SIGTERM to process group {}", pid.0);
-                
+
                 // Wait for graceful shutdown
                 tokio::time::sleep(Duration::from_millis(2000)).await;
-                
+
                 // Check if processes are still running, if so use SIGKILL
                 match signal::killpg(pgid, Signal::SIGKILL) {
                     Ok(()) => {
@@ -308,15 +325,15 @@ impl UnixProcessManager {
     /// Terminate a single process by PID with escalation
     async fn terminate_single_process(&self, pid: ProcessId) -> TerminationResult {
         let nix_pid = NixPid::from_raw(pid.0 as i32);
-        
+
         // Try SIGTERM first
         match signal::kill(nix_pid, Signal::SIGTERM) {
             Ok(()) => {
                 info!("Sent SIGTERM to process {}", pid.0);
-                
+
                 // Wait briefly for graceful shutdown
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                
+
                 // Then SIGKILL if still running
                 match signal::kill(nix_pid, Signal::SIGKILL) {
                     Ok(()) => {
@@ -347,7 +364,7 @@ impl UnixProcessManager {
             }
         }
     }
-    
+
     /// Recursively find all child processes
     fn find_children_recursive(&self, system: &System, parent_pid: u32, result: &mut Vec<u32>) {
         for (pid, process) in system.processes() {
@@ -371,7 +388,7 @@ impl ProcessManager for UnixProcessManager {
             system: std::sync::Mutex::new(System::new_all()),
         }
     }
-    
+
     async fn cleanup(&self) -> Result<()> {
         info!("Unix process manager cleanup completed");
         Ok(())
