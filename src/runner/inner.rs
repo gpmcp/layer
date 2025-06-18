@@ -36,6 +36,12 @@ impl GpmcpRunnerInner {
         let process_manager =
             ProcessManager::new(self.cancellation_token.clone(), &self.runner_config).await?;
 
+        // For SSE transport, start the server process first
+        if matches!(self.runner_config.transport, crate::Transport::Sse { .. }) {
+            info!("Starting server process for SSE transport");
+            let _handle = process_manager.start_server().await?;
+        }
+
         // Create transport manager
         let transport_manager = TransportManager::new(&self.runner_config).await?;
 

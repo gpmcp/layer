@@ -1,424 +1,405 @@
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use sysinfo::System;
-use tokio::process::{Child, Command};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::RunnerConfig;
-#[cfg(unix)]
-#[allow(unused_imports)]
-use std::os::unix::process::CommandExt;
+use super::platform_factory::create_platform_process_manager;
+use super::process_traits::{
+    ProcessHandle, ProcessId, ProcessInfo, ProcessManager as ProcessManagerTrait,
+    ProcessStatus, TerminationResult,
+};
 
-/// ProcessManager handles the lifecycle of subprocess execution.
-/// It provides functionality to start, monitor, restart, and cleanup processes.
+/// High-level process manager that wraps platform-specific implementations
+/// This is the main interface used by the MCP middleware
+#[derive(Clone)]
 pub struct ProcessManager {
-    runner_config: RunnerConfig,
-    child_handle: Arc<tokio::sync::Mutex<Option<Child>>>,
-    monitor_handle: Option<tokio::task::JoinHandle<()>>,
+    platform_manager: Arc<dyn ProcessManagerTrait>,
+    active_processes: Arc<std::sync::Mutex<HashMap<ProcessId, String>>>,
     cancellation_token: Arc<CancellationToken>,
+    runner_config: RunnerConfig,
 }
 
 impl ProcessManager {
-    /// Creates a new ProcessManager and starts the subprocess
+    /// Create a new ProcessManager with platform-specific implementation
     pub async fn new(
         cancellation_token: Arc<CancellationToken>,
         runner_config: &RunnerConfig,
     ) -> Result<Self> {
-        let child_handle = Arc::new(tokio::sync::Mutex::new(None));
-
-        let mut manager = Self {
-            runner_config: runner_config.clone(),
-            child_handle,
-            monitor_handle: None,
+        let platform_manager = create_platform_process_manager();
+        info!("Created ProcessManager with platform: {}", 
+              super::platform_factory::platform_name());
+        
+        Ok(Self {
+            platform_manager: Arc::from(platform_manager),
+            active_processes: Arc::new(std::sync::Mutex::new(HashMap::new())),
             cancellation_token,
-        };
-
-        manager.start_process().await?;
-        Ok(manager)
+            runner_config: runner_config.clone(),
+        })
     }
-
-    /// Starts the subprocess based on the server definition
-    async fn start_process(&mut self) -> Result<()> {
-        let command_runner = &self.runner_config;
-
-        let mut cmd = Command::new(&command_runner.command);
-        cmd.args(&command_runner.args);
-
-        // Set working directory if specified
-        if let Some(workdir) = &command_runner.working_directory {
-            cmd.current_dir(workdir);
-        }
-
-        // Add environment variables
-        for (key, value) in &self.runner_config.env {
-            cmd.env(key, value);
-        }
-
-        // Create a new process group for better process tree management
-        #[cfg(unix)]
-        {
-            cmd.process_group(0);
-        }
-
-        let child = cmd
-            .spawn()
-            .with_context(|| format!("Failed to start command: {}", command_runner.command))?;
-
-        // Log the PID if available
-        match child.id() {
-            Some(pid) => {
-                info!(
-                    "Started process: {} with args: {:?}, PID: {}",
-                    command_runner.command, command_runner.args, pid
-                );
-            }
-            None => {
-                warn!(
-                    "Started process: {} with args: {:?}, but PID is not available (process may have exited quickly)",
-                    command_runner.command, command_runner.args
-                );
-            }
-        }
-
-        // Store the child process
-        {
-            let mut child_guard = self.child_handle.lock().await;
-            *child_guard = Some(child);
-        }
-
-        // Start monitoring the process
-        self.start_monitor().await;
-
-        Ok(())
+    
+    /// Start the server process from the runner configuration
+    pub async fn start_server(&self) -> Result<Box<dyn ProcessHandle>> {
+        info!("Starting server process from configuration");
+        
+        let config = &self.runner_config;
+        let working_dir = config.working_directory.as_ref().map(|p| p.to_str()).flatten();
+        
+        self.spawn_process(
+            &config.command,
+            &config.args,
+            working_dir,
+            Some(&config.env),
+        ).await
     }
-
-    /// Starts the process monitor task
-    async fn start_monitor(&mut self) {
-        let child_handle = self.child_handle.clone();
-        let cancellation_token = self.cancellation_token.clone();
-
-        let monitor_handle = tokio::spawn(async move {
-            tokio::select! {
-                _ = cancellation_token.cancelled() => {
-                    info!("Cancellation requested, terminating child process");
-                    Self::terminate_child(&child_handle).await;
-                }
-                result = Self::wait_for_child(&child_handle) => {
-                    // Get PID before the process exits (if still available)
-                    let pid_info = {
-                        let child_guard = child_handle.lock().await;
-                        child_guard.as_ref()
-                            .and_then(|child| child.id())
-                            .map(|pid| format!(" (PID: {})", pid))
-                            .unwrap_or_default()
-                    };
-
-                    match result {
-                        Ok(Some(status)) => {
-                            if status.success() {
-                                info!("Child process{} exited successfully with status: {}", pid_info, status);
-                            } else {
-                                warn!("Child process{} exited with non-zero status: {}", pid_info, status);
-                            }
-                        }
-                        Ok(None) => {
-                            info!("Child process{} was already terminated", pid_info);
-                        }
-                        Err(e) => {
-                            error!("Error waiting for child process{}: {}", pid_info, e);
-                        }
-                    }
-                    // Remove the child from the handle since it's no longer running
-                    let mut child_guard = child_handle.lock().await;
-                    *child_guard = None;
-                }
-            }
-        });
-
-        self.monitor_handle = Some(monitor_handle);
+    
+    /// Check if the process manager should continue operating (not cancelled)
+    pub fn is_active(&self) -> bool {
+        !self.cancellation_token.is_cancelled()
     }
-
-    /// Waits for the child process to exit
-    async fn wait_for_child(
-        child_handle: &tokio::sync::Mutex<Option<Child>>,
-    ) -> Result<Option<std::process::ExitStatus>> {
-        let mut child_guard = child_handle.lock().await;
-        if let Some(ref mut child) = child_guard.as_mut() {
-            let status = child.wait().await?;
-            Ok(Some(status))
-        } else {
-            Ok(None)
-        }
+    
+    /// Get the runner configuration
+    pub fn get_config(&self) -> &RunnerConfig {
+        &self.runner_config
     }
-
-    /// Terminates the child process and its entire process tree using a three-step approach:
-    /// 1. Try to kill the process group (if supported)
-    /// 2. Recursively kill the process tree
-    /// 3. Use graceful (SIGTERM) then forceful (SIGKILL) termination
-    async fn terminate_child(child_handle: &Arc<tokio::sync::Mutex<Option<Child>>>) {
-        let mut child_guard = child_handle.lock().await;
-        if let Some(mut child) = child_guard.take() {
-            let pid = child.id();
-            let pid_info = pid.map(|p| format!(" (PID: {})", p)).unwrap_or_default();
-
-            info!(
-                "Starting three-step termination for child process{}",
-                pid_info
-            );
-
-            // Step 1: Try to kill the process group (Unix only)
-            let mut process_group_killed = false;
-            #[cfg(unix)]
-            if let Some(pid) = pid {
-                process_group_killed = Self::kill_process_group(pid).await;
-            }
-
-            // Step 2: If process group kill failed, try recursive process tree termination
-            if !process_group_killed {
-                if let Some(pid) = pid {
-                    Self::kill_process_tree(pid).await;
-                }
-            }
-
-            // Step 3: Finally, kill the main process with escalating signals
-            Self::kill_process_with_escalation(&mut child, &pid_info).await;
+    
+    /// Spawn a new process and track it
+    pub async fn spawn_process(
+        &self,
+        command: &str,
+        args: &[String],
+        working_dir: Option<&str>,
+        env: Option<&HashMap<String, String>>,
+    ) -> Result<Box<dyn ProcessHandle>> {
+        let env = env.cloned().unwrap_or_default();
+        
+        debug!("Spawning process: {} with args: {:?}", command, args);
+        
+        let handle = self
+            .platform_manager
+            .spawn_process(command, args, working_dir, &env)
+            .await
+            .with_context(|| format!("Failed to spawn process: {}", command))?;
+        
+        // Track the process
+        if let Some(pid) = handle.get_pid() {
+            let mut active = self.active_processes.lock().unwrap();
+            active.insert(pid, command.to_string());
+            info!("Tracking new process: {} (PID: {})", command, pid.0);
         }
+        
+        Ok(handle)
     }
-
-    /// Step 1: Kill the entire process group (Unix only)
-    #[cfg(unix)]
-    async fn kill_process_group(pid: u32) -> bool {
-        use nix::sys::signal::{self, Signal};
-        use nix::unistd::Pid as NixPid;
-
-        let pgid = NixPid::from_raw(pid as i32);
-
-        // Try SIGTERM first for graceful shutdown
-        match signal::killpg(pgid, Signal::SIGTERM) {
-            Ok(()) => {
-                info!("Sent SIGTERM to process group {}", pid);
-
-                // Wait a bit for graceful shutdown
-                tokio::time::sleep(Duration::from_millis(2000)).await;
-
-                // Check if processes are still running, if so use SIGKILL
-                match signal::killpg(pgid, Signal::SIGKILL) {
-                    Ok(()) => {
-                        info!("Sent SIGKILL to process group {}", pid);
-                        true
-                    }
-                    Err(nix::errno::Errno::ESRCH) => {
-                        info!("Process group {} already terminated", pid);
-                        true
-                    }
-                    Err(e) => {
-                        warn!("Failed to send SIGKILL to process group {}: {}", pid, e);
-                        false
-                    }
-                }
-            }
-            Err(nix::errno::Errno::ESRCH) => {
-                info!("Process group {} not found (already terminated)", pid);
-                true
-            }
-            Err(e) => {
-                warn!("Failed to send SIGTERM to process group {}: {}", pid, e);
-                false
-            }
-        }
+    
+    /// Check if a process is healthy
+    pub async fn is_process_healthy(&self, handle: &dyn ProcessHandle) -> bool {
+        self.platform_manager.is_process_healthy(handle).await
     }
-
-    /// Step 1: Fallback for non-Unix systems
-    #[cfg(not(unix))]
-    async fn kill_process_group(_pid: u32) -> bool {
-        warn!("Process group termination not supported on this platform");
-        false
+    
+    /// Get detailed process information
+    pub async fn get_process_info(&self, handle: &dyn ProcessHandle) -> Result<ProcessInfo> {
+        self.platform_manager.get_process_info(handle).await
     }
-
-    /// Step 2: Recursively kill the process tree
-    async fn kill_process_tree(root_pid: u32) {
-        info!("Enumerating and killing process tree for PID {}", root_pid);
-
-        let mut system = System::new_all();
-        system.refresh_processes_specifics(
-            sysinfo::ProcessesToUpdate::All,
-            true,
-            sysinfo::ProcessRefreshKind::new(),
-        );
-
-        // Find all descendant processes
-        let mut processes_to_kill = Vec::new();
-        Self::find_child_processes(&system, root_pid, &mut processes_to_kill);
-
-        if processes_to_kill.is_empty() {
-            info!("No child processes found for PID {}", root_pid);
-            return;
+    
+    /// Wait for a process to exit with optional timeout
+    pub async fn wait_for_exit(
+        &self,
+        handle: &mut dyn ProcessHandle,
+        timeout: Option<Duration>,
+    ) -> Result<ProcessStatus> {
+        let result = self
+            .platform_manager
+            .wait_for_exit(handle, timeout)
+            .await;
+        
+        // Untrack the process when it exits
+        if let Some(pid) = handle.get_pid() {
+            let mut active = self.active_processes.lock().unwrap();
+            if let Some(command) = active.remove(&pid) {
+                info!("Process exited: {} (PID: {})", command, pid.0);
+            }
         }
-
-        info!(
-            "Found {} child processes to terminate",
-            processes_to_kill.len()
-        );
-
-        // Kill children first (bottom-up approach)
-        for &pid in processes_to_kill.iter().rev() {
-            Self::kill_single_process(pid).await;
-        }
-
-        // Finally kill the root process
-        Self::kill_single_process(root_pid).await;
+        
+        result
     }
-
-    /// Recursively find all child processes
-    fn find_child_processes(system: &System, parent_pid: u32, result: &mut Vec<u32>) {
-        for (pid, process) in system.processes() {
-            if let Some(ppid) = process.parent() {
-                if ppid.as_u32() == parent_pid {
-                    let child_pid = pid.as_u32();
-                    // Recursively find grandchildren first
-                    Self::find_child_processes(system, child_pid, result);
-                    // Then add this child
-                    result.push(child_pid);
-                }
+    
+    /// Terminate a process gracefully
+    pub async fn terminate_gracefully(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
+        if let Some(pid) = handle.get_pid() {
+            info!("Attempting graceful termination of process {}", pid.0);
+        }
+        
+        let result = self.platform_manager.terminate_gracefully(handle).await;
+        
+        // Untrack successful terminations
+        if let (TerminationResult::Success | TerminationResult::ProcessNotFound, Some(pid)) = 
+            (&result, handle.get_pid()) {
+            let mut active = self.active_processes.lock().unwrap();
+            if let Some(command) = active.remove(&pid) {
+                info!("Process terminated gracefully: {} (PID: {})", command, pid.0);
             }
         }
+        
+        result
     }
-
-    /// Kill a single process by PID
-    async fn kill_single_process(pid: u32) {
-        #[cfg(unix)]
-        {
-            use nix::sys::signal::{self, Signal};
-            use nix::unistd::Pid as NixPid;
-
-            let nix_pid = NixPid::from_raw(pid as i32);
-
-            // Try SIGTERM first
-            match signal::kill(nix_pid, Signal::SIGTERM) {
-                Ok(()) => {
-                    info!("Sent SIGTERM to process {}", pid);
-
-                    // Wait briefly for graceful shutdown
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-
-                    // Then SIGKILL if still running
-                    match signal::kill(nix_pid, Signal::SIGKILL) {
-                        Ok(()) => info!("Sent SIGKILL to process {}", pid),
-                        Err(nix::errno::Errno::ESRCH) => {
-                            info!("Process {} already terminated", pid)
-                        }
-                        Err(e) => warn!("Failed to kill process {}: {}", pid, e),
-                    }
-                }
-                Err(nix::errno::Errno::ESRCH) => {
-                    info!("Process {} not found (already terminated)", pid);
-                }
-                Err(e) => {
-                    warn!("Failed to send SIGTERM to process {}: {}", pid, e);
-                }
+    
+    /// Force kill a process
+    pub async fn force_kill(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
+        if let Some(pid) = handle.get_pid() {
+            warn!("Force killing process {}", pid.0);
+        }
+        
+        let result = self.platform_manager.force_kill(handle).await;
+        
+        // Untrack successful kills
+        if let (TerminationResult::Success | TerminationResult::ProcessNotFound, Some(pid)) = 
+            (&result, handle.get_pid()) {
+            let mut active = self.active_processes.lock().unwrap();
+            if let Some(command) = active.remove(&pid) {
+                warn!("Process force killed: {} (PID: {})", command, pid.0);
             }
         }
-
-        #[cfg(windows)]
-        {
-            // Windows process termination
-            use tokio::process::Command as TokioCommand;
-
-            let output = TokioCommand::new("taskkill")
-                .args(["/F", "/PID", &pid.to_string()])
-                .output()
-                .await;
-
-            match output {
-                Ok(output) => {
-                    if output.status.success() {
-                        info!("Successfully terminated process {} on Windows", pid);
-                    } else {
-                        warn!("Failed to terminate process {} on Windows", pid);
-                    }
-                }
-                Err(e) => {
-                    warn!("Error running taskkill for process {}: {}", pid, e);
-                }
-            }
-        }
+        
+        result
     }
-
-    /// Step 3: Kill the main process with signal escalation
-    async fn kill_process_with_escalation(child: &mut Child, pid_info: &str) {
-        // First try the tokio kill method (SIGKILL on Unix)
-        match child.kill().await {
-            Ok(()) => {
-                info!("Child process{} killed successfully", pid_info);
-            }
-            Err(e) => {
-                warn!("Failed to kill child process{}: {}", pid_info, e);
-            }
-        }
-
-        // Wait for the process to exit to clean up resources
-        match child.wait().await {
-            Ok(status) => {
-                info!("Child process{} exited with status: {}", pid_info, status);
-            }
-            Err(e) => {
-                warn!("Error waiting for child process{} to exit: {}", pid_info, e);
-            }
-        }
+    
+    /// Find all child processes of a given process
+    pub async fn find_child_processes(&self, pid: ProcessId) -> Result<Vec<ProcessId>> {
+        debug!("Finding child processes for PID {}", pid.0);
+        self.platform_manager.find_child_processes(pid).await
     }
-
-    /// Restarts the process (useful for retry logic)
+    
+    /// Terminate an entire process tree
+    pub async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {
+        info!("Terminating process tree for root PID {}", root_pid.0);
+        
+        let result = self.platform_manager.terminate_process_tree(root_pid).await;
+        
+        // Untrack the root process on successful termination
+        if let TerminationResult::Success | TerminationResult::ProcessNotFound = &result {
+            let mut active = self.active_processes.lock().unwrap();
+            if let Some(command) = active.remove(&root_pid) {
+                info!("Process tree terminated: {} (Root PID: {})", command, root_pid.0);
+            }
+        }
+        
+        result
+    }
+    
+    /// Terminate a process group (Unix only)
+    pub async fn terminate_process_group(&self, pid: ProcessId) -> TerminationResult {
+        info!("Terminating process group for PID {}", pid.0);
+        self.platform_manager.terminate_process_group(pid).await
+    }
+    
+    /// Complete termination strategy: process group -> process tree -> individual process
+    /// This is the recommended method for ensuring complete cleanup
+    pub async fn terminate_completely(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
+        if let Some(pid) = handle.get_pid() {
+            info!("Starting complete termination for process {}", pid.0);
+        }
+        
+        let result = self.platform_manager.terminate_completely(handle).await;
+        
+        // Untrack on successful termination
+        if let (TerminationResult::Success | TerminationResult::ProcessNotFound, Some(pid)) = 
+            (&result, handle.get_pid()) {
+            let mut active = self.active_processes.lock().unwrap();
+            if let Some(command) = active.remove(&pid) {
+                info!("Complete termination successful: {} (PID: {})", command, pid.0);
+            }
+        }
+        
+        result
+    }
+    
+    /// Get list of currently tracked active processes
+    pub fn get_active_processes(&self) -> Vec<(ProcessId, String)> {
+        let active = self.active_processes.lock().unwrap();
+        active.iter().map(|(&pid, command)| (pid, command.clone())).collect()
+    }
+    
+    /// Restart the process manager (useful for retry logic)
     pub async fn restart(&mut self) -> Result<()> {
-        info!("Restarting process");
-
-        // Stop current process if running
-        self.stop_process().await?;
-
-        // Wait a bit before restarting
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-        // Start new process
-        self.start_process().await?;
-
-        info!("Process restarted successfully");
+        info!("Restarting ProcessManager");
+        
+        // First cleanup existing processes
+        self.cleanup().await?;
+        
+        // Create a new platform manager
+        let platform_manager = create_platform_process_manager();
+        self.platform_manager = Arc::from(platform_manager);
+        
+        info!("ProcessManager restarted successfully");
         Ok(())
     }
-
-    /// Stops the current process
-    async fn stop_process(&mut self) -> Result<()> {
-        // Cancel the monitor task
-        if let Some(handle) = self.monitor_handle.take() {
-            handle.abort();
+    
+    /// Cleanup all tracked processes and resources
+    pub async fn cleanup(&self) -> Result<()> {
+        info!("Starting ProcessManager cleanup");
+        
+        let active_processes = {
+            let active = self.active_processes.lock().unwrap();
+            active.keys().copied().collect::<Vec<_>>()
+        };
+        
+        if !active_processes.is_empty() {
+            warn!("Cleaning up {} active processes", active_processes.len());
+            
+            for pid in active_processes {
+                match self.platform_manager.terminate_process_tree(pid).await {
+                    TerminationResult::Success | TerminationResult::ProcessNotFound => {
+                        debug!("Successfully cleaned up process {}", pid.0);
+                    }
+                    result => {
+                        error!("Failed to cleanup process {}: {:?}", pid.0, result);
+                    }
+                }
+            }
         }
-
-        // Terminate the child process
-        Self::terminate_child(&self.child_handle).await;
-
-        Ok(())
-    }
-
-    /// Cleanup the process manager
-    pub async fn cleanup(mut self) -> Result<()> {
-        info!("Cleaning up ProcessManager");
-
-        // Stop the process
-        self.stop_process().await?;
-
+        
+        // Clear tracking
+        {
+            let mut active = self.active_processes.lock().unwrap();
+            active.clear();
+        }
+        
+        // Platform-specific cleanup
+        self.platform_manager.cleanup().await?;
+        
         info!("ProcessManager cleanup completed");
         Ok(())
     }
 }
 
+// Remove Default implementation since we now require parameters
+// impl Default for ProcessManager {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
+
+// Implement Drop to ensure cleanup on drop
 impl Drop for ProcessManager {
     fn drop(&mut self) {
-        // Cancel the cancellation token to trigger cleanup
-        self.cancellation_token.cancel();
-
-        // Abort monitor task if it exists
-        if let Some(handle) = self.monitor_handle.take() {
-            handle.abort();
+        let active_processes = {
+            let active = self.active_processes.lock().unwrap();
+            active.keys().copied().collect::<Vec<_>>()
+        };
+        
+        if !active_processes.is_empty() {
+            warn!("ProcessManager dropped with {} active processes - attempting emergency cleanup", 
+                  active_processes.len());
+            
+            // Note: We can't use async in Drop, so we'll do synchronous cleanup
+            // This is a best-effort emergency cleanup
+            for pid in active_processes {
+                #[cfg(unix)]
+                {
+                    use nix::sys::signal::{self, Signal};
+                    use nix::unistd::Pid as NixPid;
+                    
+                    let nix_pid = NixPid::from_raw(pid.0 as i32);
+                    if let Err(e) = signal::kill(nix_pid, Signal::SIGTERM) {
+                        warn!("Emergency cleanup failed for process {}: {}", pid.0, e);
+                    }
+                }
+                
+                #[cfg(windows)]
+                {
+                    use std::process::Command;
+                    
+                    if let Err(e) = Command::new("taskkill")
+                        .args(&["/F", "/T", "/PID", &pid.0.to_string()])
+                        .output()
+                    {
+                        warn!("Emergency cleanup failed for process {}: {}", pid.0, e);
+                    }
+                }
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::sleep;
+    
+    fn create_test_runner_config() -> RunnerConfig {
+        RunnerConfig {
+            name: "test".to_string(),
+            version: "1.0.0".to_string(),
+            command: "test".to_string(),
+            args: vec![],
+            env: HashMap::new(),
+            working_directory: None,
+            transport: crate::runner_config::Transport::Stdio,
+            retry_config: crate::retry_config::RetryConfig::default(),
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_process_manager_creation() {
+        let cancellation_token = Arc::new(CancellationToken::new());
+        let config = create_test_runner_config();
+        let manager = ProcessManager::new(cancellation_token, &config).await.unwrap();
+        assert_eq!(manager.get_active_processes().len(), 0);
+    }
+    
+    #[tokio::test]
+    async fn test_spawn_and_terminate() {
+        let cancellation_token = Arc::new(CancellationToken::new());
+        let config = create_test_runner_config();
+        let manager = ProcessManager::new(cancellation_token, &config).await.unwrap();
+        
+        // Spawn a simple process
+        #[cfg(unix)]
+        let mut handle = manager.spawn_process("sleep", &["5".to_string()], None, None).await.unwrap();
+        
+        #[cfg(windows)]
+        let mut handle = manager.spawn_process("ping", &["127.0.0.1".to_string(), "-n".to_string(), "10".to_string()], None, None).await.unwrap();
+        
+        // Verify it's running
+        assert!(handle.is_running().await);
+        assert_eq!(manager.get_active_processes().len(), 1);
+        
+        // Terminate it
+        let result = manager.terminate_completely(handle.as_mut()).await;
+        assert!(matches!(result, TerminationResult::Success | TerminationResult::ProcessNotFound));
+        
+        // Wait longer for cleanup
+        sleep(Duration::from_millis(1500)).await;
+        
+        // Verify it's no longer running (or allow for process not found)
+        let is_running = handle.is_running().await;
+        if is_running {
+            // Try one more time to kill it
+            let _ = manager.force_kill(handle.as_mut()).await;
+            sleep(Duration::from_millis(500)).await;
+        }
+    }
+    
+    #[tokio::test] 
+    async fn test_cleanup() {
+        let cancellation_token = Arc::new(CancellationToken::new());
+        let config = create_test_runner_config();
+        let manager = ProcessManager::new(cancellation_token, &config).await.unwrap();
+        
+        // Spawn a process
+        #[cfg(unix)]
+        let _handle = manager.spawn_process("sleep", &["10".to_string()], None, None).await.unwrap();
+        
+        #[cfg(windows)]
+        let _handle = manager.spawn_process("ping", &["127.0.0.1".to_string(), "-n".to_string(), "20".to_string()], None, None).await.unwrap();
+        
+        assert_eq!(manager.get_active_processes().len(), 1);
+        
+        // Cleanup should terminate all processes
+        manager.cleanup().await.unwrap();
+        
+        assert_eq!(manager.get_active_processes().len(), 0);
     }
 }

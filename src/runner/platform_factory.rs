@@ -1,36 +1,20 @@
-use crate::runner::traits::{
-    ProcessManager,
-    TerminationStrategy,
-};
+use super::process_traits::ProcessManager;
+
+#[cfg(unix)]
+use super::unix_process_manager::UnixProcessManager;
+#[cfg(windows)]
+use super::windows_process_manager::WindowsProcessManager;
 
 /// Factory function to create the appropriate process manager for the current platform
 pub fn create_platform_process_manager() -> Box<dyn ProcessManager> {
     #[cfg(unix)]
     {
-        Box::new(crate::runner::platforms::unix::UnixProcessManager::new())
+        Box::new(UnixProcessManager::new())
     }
     
     #[cfg(windows)]
     {
-        Box::new(crate::runner::platforms::windows::WindowsProcessManager::new())
-    }
-    
-    #[cfg(not(any(unix, windows)))]
-    {
-        compile_error!("Unsupported platform: only Unix and Windows are currently supported");
-    }
-}
-
-/// Factory function to create the appropriate termination strategy for the current platform
-pub fn create_platform_termination_strategy() -> Box<dyn TerminationStrategy> {
-    #[cfg(unix)]
-    {
-        Box::new(crate::runner::platforms::unix::UnixTerminationStrategy::new_unix())
-    }
-    
-    #[cfg(windows)]
-    {
-        Box::new(crate::runner::platforms::windows::WindowsTerminationStrategy::new_windows())
+        Box::new(WindowsProcessManager::new())
     }
     
     #[cfg(not(any(unix, windows)))]
@@ -68,6 +52,5 @@ mod tests {
         
         // Ensure we can create platform-specific managers
         let _process_manager = create_platform_process_manager();
-        let _termination_strategy = create_platform_termination_strategy();
     }
 }
