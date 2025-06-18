@@ -7,12 +7,12 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
-    name: Test
+  test-unix:
+    name: Test Unix
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest]
         rust: [stable]
       fail-fast: false
     
@@ -24,11 +24,51 @@ jobs:
       with:
         toolchain: ${{ matrix.rust }}
     
-    - name: Build
-      run: cargo build --verbose
+    - name: Build Unix-specific crates
+      run: cargo build --workspace --exclude gpmcp-layer-windows --verbose
     
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Test Unix-specific crates
+      run: cargo test --workspace --exclude gpmcp-layer-windows --verbose
+
+  test-windows:
+    name: Test Windows
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        rust: [stable]
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+    
+    - name: Build Windows-specific crates
+      run: cargo build --workspace --exclude gpmcp-layer-unix --verbose
+    
+    - name: Test Windows-specific crates
+      run: cargo test --workspace --exclude gpmcp-layer-unix --verbose
+
+  test-cross-platform:
+    name: Cross-platform compatibility
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+    
+    - name: Build all crates (with stubs)
+      run: cargo build --workspace --verbose
+    
+    - name: Test all crates (with stubs)
+      run: cargo test --workspace --verbose
 
   lint:
     name: Lint
@@ -45,5 +85,5 @@ jobs:
     - name: Check formatting
       run: cargo fmt --all -- --check
     
-    - name: Clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
+    - name: Clippy (Unix-specific)
+      run: cargo clippy --workspace --exclude gpmcp-layer-windows --all-targets --all-features -- -D warnings
