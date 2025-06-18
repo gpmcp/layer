@@ -1,5 +1,5 @@
 use gpmcp_core::{RunnerConfig, Transport};
-use gpmcp_layer::runner::GpmcpLayer;
+use gpmcp_layer::GpmcpLayer;
 
 /// Test creating a stdio runner with basic echo command
 #[tokio::test]

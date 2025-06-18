@@ -1,5 +1,5 @@
 use crate::RunnerConfig;
-use crate::runner::inner::GpmcpRunnerInner;
+use crate::runner::GpmcpRunnerInner;
 use anyhow::{Context, Result};
 use backon::{BackoffBuilder, ExponentialBackoff, ExponentialBuilder, Retryable};
 use std::future::Future;

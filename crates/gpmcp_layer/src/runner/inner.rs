@@ -34,7 +34,7 @@ impl GpmcpRunnerInner {
 
         // Create process manager if needed (for commands that need subprocess)
         let process_manager =
-            ProcessManager::new(self.cancellation_token.clone(), &self.runner_config).await?;
+            ProcessManager::new(&self.runner_config).await?;
 
         // For SSE transport, start the server process first
         if matches!(self.runner_config.transport, crate::Transport::Sse { .. }) {
