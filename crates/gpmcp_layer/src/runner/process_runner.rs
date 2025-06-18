@@ -6,12 +6,12 @@ use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub struct GpmcpRunner {
+pub struct GpmcpLayer {
     runner_config: RunnerConfig,
     inner: Arc<Mutex<Option<GpmcpRunnerInner>>>,
 }
 
-impl GpmcpRunner {
+impl GpmcpLayer {
     pub fn new(runner_config: RunnerConfig) -> anyhow::Result<Self> {
         // Validate retry config at construction time
         runner_config.retry_config.validate()?;

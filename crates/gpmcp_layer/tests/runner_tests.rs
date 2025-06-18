@@ -1,5 +1,5 @@
 use gpmcp_core::{RunnerConfig, Transport};
-use gpmcp_layer::runner::GpmcpRunner;
+use gpmcp_layer::runner::GpmcpLayer;
 
 /// Test creating a stdio runner with basic echo command
 #[tokio::test]
@@ -24,7 +24,7 @@ async fn test_stdio_runner_creation_with_echo() {
         .unwrap();
 
     // Test that the runner can be created (even if it fails to work as MCP server)
-    let result = GpmcpRunner::new(server_definition).unwrap();
+    let result = GpmcpLayer::new(server_definition).unwrap();
     println!("{:?}", result.list_tools().await.unwrap());
     result.cancel().await.unwrap();
 }
