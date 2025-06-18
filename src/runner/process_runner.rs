@@ -1,243 +1,258 @@
-use anyhow::Result;
-use gpmcp_domain::blueprint::ServerDefinition;
+use crate::RunnerConfig;
+use crate::runner::inner::GpmcpRunnerInner;
+use anyhow::{Context, Result};
+use backon::{BackoffBuilder, ExponentialBackoff, ExponentialBuilder, Retryable};
+use std::future::Future;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
-use tracing::info;
-use crate::runner::process_manager::ProcessManager;
-use crate::runner::service_coordinator::ServiceCoordinator;
-use crate::runner::transport_manager::{TransportManager, TransportType};
+use tokio::sync::Mutex;
 
-/// GpmcpRunner is the main entry point for managing MCP server connections.
-/// It coordinates between process management, transport handling, and service communication.
 pub struct GpmcpRunner {
-    service_coordinator: ServiceCoordinator,
-    process_manager: Option<ProcessManager>,
-    cancellation_token: Arc<CancellationToken>,
+    runner_config: RunnerConfig,
+    inner: Arc<Mutex<Option<GpmcpRunnerInner>>>,
 }
 
-// TODO: split into
-// - Service, where you can start and stop the runner -- we might not need this since this.
-// - ProcessManager functions so that we can have platform independent impls. 
-
 impl GpmcpRunner {
-    /// Creates a new GpmcpRunner from a ServerDefinition.
-    pub async fn new(server_definition: ServerDefinition) -> Result<Self> {
-        let cancellation_token = Arc::new(CancellationToken::new());
-
-        info!(
-            "Creating GpmcpRunner for server: {}",
-            server_definition.package.name
-        );
-
-        // Determine transport type and create appropriate managers
-        let transport_type = TransportType::from_runner(&server_definition.runner);
-
-        // Create process manager if needed (for commands that need subprocess)
-        let process_manager = if transport_type.needs_subprocess() {
-            Some(ProcessManager::new(server_definition.clone(), cancellation_token.clone()).await?)
-        } else {
-            None
-        };
-
-        // Create transport manager
-        let transport_manager = TransportManager::new(
-            transport_type,
-            server_definition.clone(),
-            process_manager.as_ref(),
-        )
-        .await?;
-
-        // Create service coordinator
-        let service_coordinator =
-            ServiceCoordinator::new(transport_manager, server_definition).await?;
-
-        info!("✅ GpmcpRunner created successfully");
+    pub fn new(runner_config: RunnerConfig) -> anyhow::Result<Self> {
+        // Validate retry config at construction time
+        runner_config.retry_config.validate()?;
 
         Ok(Self {
-            service_coordinator,
-            process_manager,
-            cancellation_token,
+            runner_config,
+            inner: Default::default(),
         })
     }
 
-    /// List available tools from the MCP server
+    /// Create a new ExponentialBackoff strategy based on the current retry config
+    /// This is called each time we need to retry, but the creation is lightweight
+    fn create_retry_strategy(&self) -> Option<ExponentialBackoff> {
+        let retry_config = &self.runner_config.retry_config;
+
+        if !retry_config.retries_enabled() {
+            return None;
+        }
+
+        let strategy = if retry_config.use_exponential_backoff {
+            ExponentialBuilder::default()
+                .with_min_delay(retry_config.min_delay())
+                .with_max_delay(retry_config.max_delay())
+                .with_max_times(retry_config.max_attempts as usize)
+                .build()
+        } else {
+            // For fixed delay, use min_delay as the fixed interval
+            ExponentialBuilder::default()
+                .with_min_delay(retry_config.min_delay())
+                .with_max_delay(retry_config.min_delay()) // Same as min for fixed delay
+                .with_max_times(retry_config.max_attempts as usize)
+                .build()
+        };
+
+        Some(strategy)
+    }
+
+    /// Generic retry mechanism for operations that may fail due to connection issues
+    /// Creates retry strategy on-demand based on stored configuration
+    async fn attempt_with_retry<T, F, Fut>(&self, operation: F) -> Result<T>
+    where
+        F: Fn() -> Fut + Send + Sync,
+        Fut: Future<Output = Result<T>> + Send,
+        T: Send,
+    {
+        let retry_config = &self.runner_config.retry_config;
+
+        // If retries are disabled, just try once
+        let Some(retry_strategy) = self.create_retry_strategy() else {
+            if retry_config.retry_on_connection_failure {
+                self.ensure_connected_internal().await?;
+            }
+            return operation().await;
+        };
+
+        (|| async {
+            // Try to ensure connection before each attempt
+            if retry_config.retry_on_connection_failure {
+                self.ensure_connected_internal().await?;
+            }
+
+            // Attempt the operation
+            operation().await.map_err(|e| {
+                // Clear connection on failure if operation retries are enabled
+                if retry_config.retry_on_operation_failure {
+                    tokio::spawn({
+                        let inner = self.inner.clone();
+                        async move {
+                            let mut lock = inner.lock().await;
+                            if let Some(inner) = lock.as_mut() {
+                                inner.restart_process().await.ok();
+                            }
+                        }
+                    });
+                }
+                e
+            })
+        })
+        .retry(retry_strategy)
+        .await
+    }
+
+    /// Internal connection management - ensures connection without retry logic
+    /// This is used by attempt_with_retry to avoid circular dependencies
+    async fn ensure_connected_internal(&self) -> Result<()> {
+        let mut lock = self.inner.lock().await;
+
+        if lock.is_none() {
+            // Create new inner instance and connect
+            let inner = GpmcpRunnerInner::new(self.runner_config.clone());
+            inner
+                .connect()
+                .await
+                .context("Failed to connect to service")?;
+            *lock = Some(inner);
+        }
+
+        Ok(())
+    }
+
     pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult> {
-        self.service_coordinator.list_tools().await
+        self.attempt_with_retry(|| async {
+            let lock = self.inner.lock().await;
+            let inner = lock
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
+            let result = inner
+                .list_tools()
+                .await
+                .map_err(|e| anyhow::anyhow!("list_tools failed: {}", e))?;
+            Ok(result)
+        })
+        .await
     }
 
-    /// List available prompts from the MCP server
-    pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult> {
-        self.service_coordinator.list_prompts().await
-    }
-
-    /// List available resources from the MCP server
-    pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult> {
-        self.service_coordinator.list_resources().await
-    }
-
-    /// Call a tool on the MCP server
     pub async fn call_tool(
         &self,
         request: rmcp::model::CallToolRequestParam,
     ) -> Result<rmcp::model::CallToolResult> {
-        self.service_coordinator.call_tool(request).await
+        self.attempt_with_retry(|| async {
+            let lock = self.inner.lock().await;
+            let inner = lock
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
+            let result = inner
+                .call_tool(request.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!("call_tool failed: {}", e))?;
+            Ok(result)
+        })
+        .await
     }
 
-    /// Get a prompt from the MCP server
+    pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult> {
+        self.attempt_with_retry(|| async {
+            let lock = self.inner.lock().await;
+            let inner = lock
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
+            let result = inner
+                .list_prompts()
+                .await
+                .map_err(|e| anyhow::anyhow!("list_prompts failed: {}", e))?;
+            Ok(result)
+        })
+        .await
+    }
+
+    pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult> {
+        self.attempt_with_retry(|| async {
+            let lock = self.inner.lock().await;
+            let inner = lock
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
+            let result = inner
+                .list_resources()
+                .await
+                .map_err(|e| anyhow::anyhow!("list_resources failed: {}", e))?;
+            Ok(result)
+        })
+        .await
+    }
+
     pub async fn get_prompt(
         &self,
         request: rmcp::model::GetPromptRequestParam,
     ) -> Result<rmcp::model::GetPromptResult> {
-        self.service_coordinator.get_prompt(request).await
+        self.attempt_with_retry(|| async {
+            let lock = self.inner.lock().await;
+            let inner = lock
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
+            let result = inner
+                .get_prompt(request.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!("get_prompt failed: {}", e))?;
+            Ok(result)
+        })
+        .await
     }
 
-    /// Read a resource from the MCP server
     pub async fn read_resource(
         &self,
         request: rmcp::model::ReadResourceRequestParam,
     ) -> Result<rmcp::model::ReadResourceResult> {
-        self.service_coordinator.read_resource(request).await
+        self.attempt_with_retry(|| async {
+            let lock = self.inner.lock().await;
+            let inner = lock
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
+            let result = inner
+                .read_resource(request.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!("read_resource failed: {}", e))?;
+            Ok(result)
+        })
+        .await
     }
 
-    /// Get server information
-    pub fn peer_info(&self) -> Option<&rmcp::model::ServerInfo> {
-        self.service_coordinator.peer_info()
-    }
-
-    /// Restart the process (useful for retry logic)
-    pub async fn restart_process(&mut self) -> Result<()> {
-        if let Some(ref mut process_manager) = self.process_manager {
-            process_manager.restart().await?;
-            info!("Process restarted successfully");
-        }
-        Ok(())
-    }
-
-    /// Check if the underlying process is healthy
-    pub async fn is_process_healthy(&self) -> bool {
-        if let Some(ref process_manager) = self.process_manager {
-            process_manager.is_healthy().await
+    /// Get server information - synchronous method, no retry needed
+    /// Returns None if not connected, Some(ServerInfo) if available
+    pub async fn peer_info(&self) -> Option<rmcp::model::ServerInfo> {
+        let lock = self.inner.lock().await;
+        if let Some(inner) = lock.as_ref() {
+            inner.peer_info().await
         } else {
-            true // No process to check
+            None
         }
     }
 
-    /// Cancel the runner and clean up resources
-    pub async fn cancel(self) -> Result<()> {
-        info!("Cancelling GpmcpRunner");
-
-        // Destructure self to move out the components
-        let GpmcpRunner {
-            service_coordinator,
-            process_manager,
-            cancellation_token,
-        } = self;
-        cancellation_token.cancel();
-
-        // Cancel service first
-        service_coordinator.cancel().await?;
-
-        // Then cleanup process if exists
-        if let Some(process_manager) = process_manager {
-            process_manager.cleanup().await?;
-        }
-
-        info!("GpmcpRunner cancelled successfully");
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use gpmcp_domain::blueprint::{CommandRunner, Runner};
-    use std::collections::HashMap;
-
-    #[tokio::test]
-    async fn test_runner_creation_stdio() {
-        let command_runner = CommandRunner {
-            command: "echo".to_string(),
-            args: vec!["hello".to_string()],
-            workdir: String::new(),
-        };
-
-        let server_definition = ServerDefinition {
-            runner: Runner::Stdio { command_runner },
-            env: HashMap::new(),
-            ..Default::default()
-        };
-
-        let result = GpmcpRunner::new(server_definition).await;
-
-        match result {
-            Ok(runner) => {
-                let _ = runner.cancel().await;
-            }
-            Err(e) => {
-                println!("Expected error for echo command: {}", e);
-            }
-        }
+    /// Health check method - uses list_tools as the litmus test
+    /// This is the primary way to check if the server is running and healthy
+    pub async fn is_healthy(&self) -> bool {
+        // Use list_tools as health check with retry for robustness
+        self.attempt_with_retry(|| async {
+            let lock = self.inner.lock().await;
+            let inner = lock
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
+            inner
+                .list_tools()
+                .await
+                .map_err(|e| anyhow::anyhow!("Health check failed: {}", e))?;
+            Ok(())
+        })
+        .await
+        .is_ok()
     }
 
-    #[tokio::test]
-    async fn test_runner_creation_sse() {
-        let command_runner = CommandRunner {
-            command: "sleep".to_string(),
-            args: vec!["1".to_string()],
-            workdir: String::new(),
+    /// Quick health check without retries - for immediate feedback
+    /// Returns true only if the connection exists and list_tools succeeds immediately
+    pub async fn is_healthy_quick(&self) -> bool {
+        let lock = match self.inner.try_lock() {
+            Ok(lock) => lock,
+            Err(_) => return false, // Can't get lock immediately
         };
 
-        let server_definition = ServerDefinition {
-            runner: Runner::Sse {
-                command_runner,
-                url: "http://localhost:8000/sse".to_string(),
-            },
-            env: HashMap::new(),
-            ..Default::default()
-        };
-
-        let result = GpmcpRunner::new(server_definition).await;
-
-        match result {
-            Ok(runner) => {
-                let _ = runner.cancel().await;
-            }
-            Err(e) => {
-                println!("Expected error due to no SSE server: {}", e);
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_process_health_check() {
-        let command_runner = CommandRunner {
-            command: "sleep".to_string(),
-            args: vec!["10".to_string()],
-            workdir: String::new(),
-        };
-
-        let server_definition = ServerDefinition {
-            runner: Runner::Sse {
-                command_runner,
-                url: "http://localhost:8000/sse".to_string(),
-            },
-            env: HashMap::new(),
-            ..Default::default()
-        };
-
-        let result = GpmcpRunner::new(server_definition).await;
-
-        match result {
-            Ok(runner) => {
-                // Process should be healthy initially (even if SSE fails)
-                let is_healthy = runner.is_process_healthy().await;
-                println!("Process healthy: {}", is_healthy);
-
-                let _ = runner.cancel().await;
-            }
-            Err(e) => {
-                println!("Expected error: {}", e);
-            }
+        if let Some(inner) = lock.as_ref() {
+            inner.list_tools().await.is_ok()
+        } else {
+            false
         }
     }
 }

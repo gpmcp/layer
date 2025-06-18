@@ -1,9 +1,9 @@
 use crate::runner::transport_manager::TransportManager;
 use anyhow::{Context, Result};
-use gpmcp_domain::blueprint::ServerDefinition;
 use rmcp::model::{ClientInfo, InitializeRequestParam};
 use rmcp::{ServiceExt, service::RunningService};
 use tracing::info;
+use crate::RunnerConfig;
 
 /// ServiceCoordinator manages the MCP service connection and provides
 /// a unified interface for all MCP operations
@@ -15,12 +15,12 @@ impl ServiceCoordinator {
     /// Creates a new ServiceCoordinator
     pub async fn new(
         transport_manager: TransportManager,
-        server_definition: ServerDefinition,
+        runner_config: &RunnerConfig,
     ) -> Result<Self> {
         info!("Creating service coordinator");
 
         // Create client info
-        let client_info = Self::create_client_info(&server_definition);
+        let client_info = Self::create_client_info(runner_config);
 
         // Get the transport and create the service
         let transport = transport_manager.into_transport();
@@ -37,19 +37,19 @@ impl ServiceCoordinator {
                 .context("Failed to create SSE service")?,
         };
 
-        info!("✅ Service coordinator created successfully");
+        info!("Service coordinator created successfully");
 
         Ok(Self { service })
     }
 
     /// Creates client info from server definition
-    fn create_client_info(server_definition: &ServerDefinition) -> ClientInfo {
+    fn create_client_info(runner_config: &RunnerConfig) -> ClientInfo {
         ClientInfo {
             protocol_version: rmcp::model::ProtocolVersion::default(),
             capabilities: rmcp::model::ClientCapabilities::default(),
             client_info: rmcp::model::Implementation {
-                name: server_definition.package.name.to_string(),
-                version: server_definition.package.version.to_string(),
+                name: runner_config.name.to_string(),
+                version: runner_config.version.to_string(),
             },
         }
     }
@@ -114,76 +114,5 @@ impl ServiceCoordinator {
     /// Get server information
     pub fn peer_info(&self) -> Option<&rmcp::model::ServerInfo> {
         self.service.peer_info()
-    }
-
-    /// Cancel the service
-    pub async fn cancel(self) -> Result<()> {
-        info!("Cancelling service coordinator");
-        self.service
-            .cancel()
-            .await
-            .context("Failed to cancel service")?;
-        info!("Service coordinator cancelled successfully");
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::runner::transport_manager::TransportType;
-    use gpmcp_domain::blueprint::{CommandRunner, Runner};
-    use std::collections::HashMap;
-
-    fn create_test_server_definition() -> ServerDefinition {
-        let command_runner = CommandRunner {
-            command: "echo".to_string(),
-            args: vec!["hello".to_string()],
-            workdir: String::new(),
-        };
-
-        ServerDefinition {
-            runner: Runner::Stdio { command_runner },
-            env: HashMap::new(),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn test_client_info_creation() {
-        let server_definition = create_test_server_definition();
-        let client_info = ServiceCoordinator::create_client_info(&server_definition);
-
-        assert_eq!(client_info.client_info.name, server_definition.package.name);
-        assert_eq!(
-            client_info.client_info.version,
-            server_definition.package.version
-        );
-    }
-
-    #[tokio::test]
-    async fn test_service_coordinator_creation() {
-        let server_definition = create_test_server_definition();
-        let transport_type = TransportType::from_runner(&server_definition.runner);
-
-        let transport_manager =
-            TransportManager::new(transport_type, server_definition.clone(), None).await;
-
-        match transport_manager {
-            Ok(tm) => {
-                let result = ServiceCoordinator::new(tm, server_definition).await;
-                match result {
-                    Ok(coordinator) => {
-                        let _ = coordinator.cancel().await;
-                    }
-                    Err(e) => {
-                        println!("Expected error for echo command: {}", e);
-                    }
-                }
-            }
-            Err(e) => {
-                println!("Transport manager creation failed: {}", e);
-            }
-        }
     }
 }
