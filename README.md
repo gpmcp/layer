@@ -173,37 +173,6 @@ fn main() {
 }
 ```
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass (`cargo test --workspace`)
-6. Run clippy (`cargo clippy --workspace -- -D warnings`)
-7. Format code (`cargo fmt --all`)
-8. Commit your changes (`git commit -m 'Add amazing feature'`)
-9. Push to the branch (`git push origin feature/amazing-feature`)
-10. Open a Pull Request
-
-### Development Setup
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd layer
-
-# Install dependencies and build
-cargo build --workspace
-
-# Run tests
-cargo test --workspace
-
-# Check formatting and linting
-cargo fmt --all --check
-cargo clippy --workspace -- -D warnings
-```
-
 ## Performance Considerations
 
 - Process spawning is optimized for each platform
@@ -217,12 +186,3 @@ cargo clippy --workspace -- -D warnings
 - Secure environment variable handling
 - Proper cleanup of sensitive data
 - No hardcoded credentials or secrets
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Process won't start**: Check command path and permissions
-2. **Connection timeouts**: Adjust retry configuration
-3. **Platform-specific build errors**: Use platform-specific build commands
-4. **Health check failures**: Verify server is responding to list_tools
