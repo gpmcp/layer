@@ -32,12 +32,7 @@ impl GpmcpLayer {
         }
 
         // max_attempts is total attempts (initial + retries)
-        // backon's max_times is number of retries, so we subtract 1
-        let max_retries = if retry_config.max_attempts > 0 {
-            retry_config.max_attempts as usize - 1
-        } else {
-            0
-        };
+        let max_retries = retry_config.max_attempts.max(1) as usize;
 
         let strategy = if retry_config.use_exponential_backoff {
             ExponentialBuilder::default()
@@ -100,16 +95,14 @@ impl GpmcpLayer {
     /// Internal connection management - ensures connection without retry logic
     /// This is used by attempt_with_retry to avoid circular dependencies
     async fn ensure_connected_internal(&self) -> Result<()> {
-        let mut lock = self.inner.lock().await;
-
-        if lock.is_none() {
+        if !self.is_healthy().await {
             // Create new inner instance and connect
             let inner = GpmcpRunnerInner::new(self.runner_config.clone());
             inner
                 .connect()
                 .await
                 .context("Failed to connect to service")?;
-            *lock = Some(inner);
+            *self.inner.lock().await = Some(inner);
         }
 
         Ok(())
@@ -132,11 +125,10 @@ impl GpmcpLayer {
             let inner = lock
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            let result = inner
+            inner
                 .list_tools()
                 .await
-                .map_err(|e| anyhow::anyhow!("list_tools failed: {}", e))?;
-            Ok(result)
+                .map_err(|e| anyhow::anyhow!("list_tools failed: {}", e))
         })
         .await
     }
@@ -150,11 +142,10 @@ impl GpmcpLayer {
             let inner = lock
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            let result = inner
+            inner
                 .call_tool(request.clone())
                 .await
-                .map_err(|e| anyhow::anyhow!("call_tool failed: {}", e))?;
-            Ok(result)
+                .map_err(|e| anyhow::anyhow!("call_tool failed: {}", e))
         })
         .await
     }
@@ -165,11 +156,10 @@ impl GpmcpLayer {
             let inner = lock
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            let result = inner
+            inner
                 .list_prompts()
                 .await
-                .map_err(|e| anyhow::anyhow!("list_prompts failed: {}", e))?;
-            Ok(result)
+                .map_err(|e| anyhow::anyhow!("list_prompts failed: {}", e))
         })
         .await
     }
@@ -180,11 +170,10 @@ impl GpmcpLayer {
             let inner = lock
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            let result = inner
+            inner
                 .list_resources()
                 .await
-                .map_err(|e| anyhow::anyhow!("list_resources failed: {}", e))?;
-            Ok(result)
+                .map_err(|e| anyhow::anyhow!("list_resources failed: {}", e))
         })
         .await
     }
@@ -198,11 +187,10 @@ impl GpmcpLayer {
             let inner = lock
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            let result = inner
+            inner
                 .get_prompt(request.clone())
                 .await
-                .map_err(|e| anyhow::anyhow!("get_prompt failed: {}", e))?;
-            Ok(result)
+                .map_err(|e| anyhow::anyhow!("get_prompt failed: {}", e))
         })
         .await
     }
@@ -216,11 +204,10 @@ impl GpmcpLayer {
             let inner = lock
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            let result = inner
+            inner
                 .read_resource(request.clone())
                 .await
-                .map_err(|e| anyhow::anyhow!("read_resource failed: {}", e))?;
-            Ok(result)
+                .map_err(|e| anyhow::anyhow!("read_resource failed: {}", e))
         })
         .await
     }
@@ -240,7 +227,7 @@ impl GpmcpLayer {
     /// This is the primary way to check if the server is running and healthy
     pub async fn is_healthy(&self) -> bool {
         // Use list_tools as health check with retry for robustness
-        self.attempt_with_retry(|| async {
+        async {
             let lock = self.inner.lock().await;
             let inner = lock
                 .as_ref()
@@ -249,8 +236,8 @@ impl GpmcpLayer {
                 .list_tools()
                 .await
                 .map_err(|e| anyhow::anyhow!("Health check failed: {}", e))?;
-            Ok(())
-        })
+            Ok::<_, anyhow::Error>(())
+        }
         .await
         .is_ok()
     }
