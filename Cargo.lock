@@ -510,9 +510,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "backon",
- "gpmcp-layer-core",
- "gpmcp-layer-unix",
- "gpmcp-layer-windows",
+ "gpmcp-layer-core 0.1.0 (git+https://github.com/gpmcp/layer)",
+ "gpmcp-layer-unix 0.1.0 (git+https://github.com/gpmcp/layer)",
+ "gpmcp-layer-windows 0.1.0 (git+https://github.com/gpmcp/layer)",
  "nix",
  "reqwest",
  "rmcp",
@@ -536,12 +536,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpmcp-layer-core"
+version = "0.1.0"
+source = "git+https://github.com/gpmcp/layer#cf13e08f71ff97dd2521476f12038d0c917f233a"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "derive_builder",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "gpmcp-layer-unix"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "gpmcp-layer-core",
+ "gpmcp-layer-core 0.1.0 (git+https://github.com/gpmcp/layer)",
+ "nix",
+ "sysinfo",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "gpmcp-layer-unix"
+version = "0.1.0"
+source = "git+https://github.com/gpmcp/layer#cf13e08f71ff97dd2521476f12038d0c917f233a"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "gpmcp-layer-core 0.1.0 (git+https://github.com/gpmcp/layer)",
  "nix",
  "sysinfo",
  "tokio",
@@ -554,7 +582,21 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "gpmcp-layer-core",
+ "gpmcp-layer-core 0.1.0 (git+https://github.com/gpmcp/layer)",
+ "sysinfo",
+ "tokio",
+ "tracing",
+ "windows",
+]
+
+[[package]]
+name = "gpmcp-layer-windows"
+version = "0.1.0"
+source = "git+https://github.com/gpmcp/layer#cf13e08f71ff97dd2521476f12038d0c917f233a"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "gpmcp-layer-core 0.1.0 (git+https://github.com/gpmcp/layer)",
  "sysinfo",
  "tokio",
  "tracing",
