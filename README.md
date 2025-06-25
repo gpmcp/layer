@@ -3,7 +3,7 @@
 A robust, cross-platform Rust library for managing Model Context Protocol (MCP) server processes with advanced retry
 logic, health monitoring, and platform-specific optimizations.
 
-## Overview
+## Overview 
 
 GPMCP Layer provides a high-level abstraction for spawning, managing, and communicating with MCP servers. It handles
 process lifecycle management, automatic reconnection with configurable retry strategies, and platform-specific
@@ -78,6 +78,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```
+
 
 ## Examples
 
