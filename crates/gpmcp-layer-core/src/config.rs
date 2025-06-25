@@ -159,6 +159,7 @@ pub struct RunnerConfig {
     #[builder(setter(custom))]
     pub args: Vec<String>,
     #[builder(default)]
+    #[builder(setter(custom))]
     pub env: HashMap<String, String>,
     #[builder(default)]
     pub transport: Transport,
@@ -177,6 +178,20 @@ impl RunnerConfigBuilder {
     pub fn args<S: ToString, I: IntoIterator<Item = S>>(&mut self, iter: I) -> &mut Self {
         let args: Vec<String> = iter.into_iter().map(|s| s.to_string()).collect();
         self.args = Some(args);
+        self
+    }
+    pub fn env<T: ToString>(&mut self, key: T, value: T) -> &mut Self {
+        let map = self.env.get_or_insert_with(HashMap::new);
+        map.insert(key.to_string(), value.to_string());
+
+        self
+    }
+
+    pub fn env_multi<T: ToString, I: IntoIterator<Item = (T, T)>>(&mut self, iter: I) -> &mut Self {
+        let mut env = self.env.get_or_insert_with(HashMap::new);
+        for (key, value) in iter {
+            env.insert(key.to_string(), value.to_string());
+        }
         self
     }
 }
