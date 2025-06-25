@@ -117,7 +117,7 @@ impl ProcessLifecycle for WindowsProcessManager {
 
         let child = cmd
             .spawn()
-            .with_context(|| format!("Failed to spawn process: {}", command))?;
+            .with_context(|| format!("Failed to spawn process: {command}"))?;
 
         // Log successful process creation
         if let Some(pid) = child.id() {
@@ -190,7 +190,7 @@ impl ProcessTermination for WindowsProcessManager {
                 }
                 Err(e) => {
                     warn!("Failed to gracefully terminate process {}: {}", pid.0, e);
-                    TerminationResult::Failed(format!("Graceful termination failed: {}", e))
+                    TerminationResult::Failed(format!("Graceful termination failed: {e}"))
                 }
             }
         } else {
@@ -215,7 +215,7 @@ impl ProcessTermination for WindowsProcessManager {
                 }
                 Err(e) => {
                     warn!("Failed to force kill process {}: {}", pid.0, e);
-                    TerminationResult::Failed(format!("Force kill failed: {}", e))
+                    TerminationResult::Failed(format!("Force kill failed: {e}"))
                 }
             }
         } else {
@@ -232,7 +232,7 @@ impl ProcessTermination for WindowsProcessManager {
         );
 
         let mut children = Vec::new();
-        self.find_children_recursive(&system, parent_pid.0, &mut children);
+        Self::find_children_recursive(&system, parent_pid.0, &mut children);
 
         Ok(children.into_iter().map(ProcessId::from).collect())
     }
@@ -268,8 +268,7 @@ impl ProcessTermination for WindowsProcessManager {
                             root_pid.0, e
                         );
                         return TerminationResult::Failed(format!(
-                            "Failed to enumerate children: {}",
-                            e
+                            "Failed to enumerate children: {e}"
                         ));
                     }
                 };
@@ -324,7 +323,7 @@ impl WindowsProcessManager {
     /// Use taskkill with /T to terminate a process tree
     async fn taskkill_tree(&self, pid: u32) -> Result<bool> {
         let output = Command::new("taskkill")
-            .args(&["/F", "/T", "/PID", &pid.to_string()])
+            .args(["/F", "/T", "/PID", &pid.to_string()])
             .output()
             .await?;
 
@@ -362,7 +361,7 @@ impl WindowsProcessManager {
                         }
                         Err(e) => {
                             warn!("Failed to force kill process {}: {}", pid.0, e);
-                            TerminationResult::Failed(format!("Force kill failed: {}", e))
+                            TerminationResult::Failed(format!("Force kill failed: {e}"))
                         }
                     }
                 } else {
@@ -379,19 +378,20 @@ impl WindowsProcessManager {
                     "Failed to send graceful termination to process {}: {}",
                     pid.0, e
                 );
-                TerminationResult::Failed(format!("Graceful termination failed: {}", e))
+                TerminationResult::Failed(format!("Graceful termination failed: {e}"))
             }
         }
     }
 
     /// Recursively find all child processes
-    fn find_children_recursive(&self, system: &System, parent_pid: u32, result: &mut Vec<u32>) {
+    fn find_children_recursive(system: &System, parent_pid: u32, result: &mut Vec<u32>) {
         for (pid, process) in system.processes() {
+            #[allow(clippy::collapsible_if)]
             if let Some(ppid) = process.parent() {
                 if ppid.as_u32() == parent_pid {
                     let child_pid = pid.as_u32();
                     // Recursively find grandchildren first
-                    self.find_children_recursive(system, child_pid, result);
+                    Self::find_children_recursive(system, child_pid, result);
                     // Then add this child
                     result.push(child_pid);
                 }

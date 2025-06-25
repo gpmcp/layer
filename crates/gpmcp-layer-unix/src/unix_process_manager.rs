@@ -373,6 +373,7 @@ mod unix_impl {
         /// Recursively find all child processes
         fn find_children_recursive(system: &System, parent_pid: u32, result: &mut Vec<u32>) {
             for (pid, process) in system.processes() {
+                #[allow(clippy::collapsible_if)]
                 if let Some(ppid) = process.parent() {
                     if ppid.as_u32() == parent_pid {
                         let child_pid = pid.as_u32();
