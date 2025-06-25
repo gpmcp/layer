@@ -188,7 +188,7 @@ impl RunnerConfigBuilder {
     }
 
     pub fn env_multi<T: ToString, I: IntoIterator<Item = (T, T)>>(&mut self, iter: I) -> &mut Self {
-        let mut env = self.env.get_or_insert_with(HashMap::new);
+        let env = self.env.get_or_insert_with(HashMap::new);
         for (key, value) in iter {
             env.insert(key.to_string(), value.to_string());
         }
