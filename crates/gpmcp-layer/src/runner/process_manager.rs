@@ -178,20 +178,16 @@ impl Drop for ProcessManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{RetryConfig, Transport};
-    use std::collections::HashMap;
+    use gpmcp_layer_core::RunnerConfigBuilder;
 
     fn create_test_config() -> RunnerConfig {
-        RunnerConfig {
-            name: "test".to_string(),
-            version: "1.0.0".to_string(),
-            command: "echo".to_string(),
-            args: vec!["hello".to_string()],
-            env: HashMap::new(),
-            working_directory: None,
-            transport: Transport::Stdio,
-            retry_config: RetryConfig::default(),
-        }
+        RunnerConfigBuilder::default()
+            .name("test")
+            .version("1.0.0")
+            .command("echo")
+            .args(["test"])
+            .build()
+            .expect("Failed to create test RunnerConfig")
     }
 
     #[tokio::test]

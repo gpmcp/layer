@@ -163,6 +163,7 @@ pub struct RunnerConfig {
     pub env: HashMap<String, String>,
     #[builder(default)]
     pub transport: Transport,
+    #[builder(default)]
     pub working_directory: Option<PathBuf>,
     #[builder(default)]
     pub retry_config: RetryConfig,
