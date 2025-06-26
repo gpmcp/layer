@@ -1,0 +1,10 @@
+[package]
+name = "simple"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gpmcp-layer = { path = "../../crates/gpmcp-layer" }
+tokio = { version = "1.45.1", features = ["macros"] }
+anyhow = "1.0.98"
+tracing-subscriber = "0.3.19"
