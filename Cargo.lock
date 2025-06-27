@@ -227,6 +227,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
+name = "counter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "rmcp",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1435,7 +1448,7 @@ dependencies = [
 [[package]]
 name = "rmcp"
 version = "0.1.5"
-source = "git+https://github.com/modelcontextprotocol/rust-sdk?rev=8a577659f01917289064c0a3c753392b44305ef4#8a577659f01917289064c0a3c753392b44305ef4"
+source = "git+https://github.com/gpmcp/rust-sdk?rev=b9d7d61ebd6e8385cbc4aa105d4e25774fc1a59c#b9d7d61ebd6e8385cbc4aa105d4e25774fc1a59c"
 dependencies = [
  "axum",
  "base64",
@@ -1467,8 +1480,9 @@ dependencies = [
 [[package]]
 name = "rmcp-macros"
 version = "0.1.5"
-source = "git+https://github.com/modelcontextprotocol/rust-sdk?rev=8a577659f01917289064c0a3c753392b44305ef4#8a577659f01917289064c0a3c753392b44305ef4"
+source = "git+https://github.com/gpmcp/rust-sdk?rev=b9d7d61ebd6e8385cbc4aa105d4e25774fc1a59c#b9d7d61ebd6e8385cbc4aa105d4e25774fc1a59c"
 dependencies = [
+ "darling",
  "proc-macro2",
  "quote",
  "serde_json",
@@ -1697,6 +1711,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9203b8055f63a2a00e2f593bb0510367fe707d7ff1e5c872de2f537b339e5410"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "simple_sse"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpmcp-layer",
+ "tokio",
+]
+
+[[package]]
+name = "simple_stdio"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpmcp-layer",
+ "tokio",
 ]
 
 [[package]]

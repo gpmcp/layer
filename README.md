@@ -82,7 +82,12 @@ async fn main() -> anyhow::Result<()> {
 
 ## Examples
 
-Coming soon! Will be available in `examples/` directory for practical use cases and advanced configurations.
+Practical examples are available in the `examples/` directory:
+
+- **Simple Client** (`examples/simple/`) - Basic GPMCP Layer usage demonstrating server connection, tool discovery, and communication patterns
+- **Counter Server** (`examples/servers/counter/`) - Sample MCP server implementing stateful counter operations with both stdio and SSE transport support
+
+See the [examples README](examples/README.md) for detailed usage instructions.
 
 ## API Reference
 

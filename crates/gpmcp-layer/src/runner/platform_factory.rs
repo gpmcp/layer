@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn test_platform_detection() {
         let platform = PlatformProcessManagerFactory::platform_name();
-        println!("Running on platform: {}", platform);
+        println!("Running on platform: {platform}");
 
         // Ensure we can create platform-specific managers
         let _process_manager = PlatformProcessManagerFactory::create_process_manager();

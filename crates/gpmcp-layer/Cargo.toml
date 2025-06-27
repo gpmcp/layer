@@ -9,7 +9,7 @@ tokio = { version = "1.0", features = ["full"] }
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", rev = "8a577659f01917289064c0a3c753392b44305ef4", features = [
+rmcp = { git = "https://github.com/gpmcp/rust-sdk", rev = "b9d7d61ebd6e8385cbc4aa105d4e25774fc1a59c", features = [
     "client",
     "transport-sse-client",
     "reqwest",
