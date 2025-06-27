@@ -50,9 +50,7 @@ impl GpmcpRunnerInner {
         // Create transport manager
         let transport_manager = TransportManager::new(&self.runner_config)
             .await
-            .map_err(|e| {
-                GpmcpError::transport_error(format!("Failed to create transport: {e}"))
-            })?;
+            .map_err(|e| GpmcpError::transport_error(format!("Failed to create transport: {e}")))?;
 
         // Create service coordinator
         let service_coordinator = ServiceCoordinator::new(transport_manager, &self.runner_config)
@@ -104,9 +102,10 @@ impl GpmcpRunnerInner {
     /// List available prompts from the MCP server
     pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            coordinator.list_prompts().await.map_err(|e| {
-                GpmcpError::mcp_operation_failed(format!("list_prompts failed: {e}"))
-            })
+            coordinator
+                .list_prompts()
+                .await
+                .map_err(|e| GpmcpError::mcp_operation_failed(format!("list_prompts failed: {e}")))
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -144,9 +143,10 @@ impl GpmcpRunnerInner {
         request: rmcp::model::ReadResourceRequestParam,
     ) -> Result<rmcp::model::ReadResourceResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            coordinator.read_resource(request).await.map_err(|e| {
-                GpmcpError::mcp_operation_failed(format!("read_resource failed: {e}"))
-            })
+            coordinator
+                .read_resource(request)
+                .await
+                .map_err(|e| GpmcpError::mcp_operation_failed(format!("read_resource failed: {e}")))
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -189,9 +189,7 @@ impl GpmcpRunnerInner {
         // Cancel service first
         if let Some(coordinator) = service_coordinator.write().await.take() {
             coordinator.cancel().await.map_err(|e| {
-                GpmcpError::service_initialization_failed(format!(
-                    "Failed to cancel service: {e}"
-                ))
+                GpmcpError::service_initialization_failed(format!("Failed to cancel service: {e}"))
             })?;
         }
 
