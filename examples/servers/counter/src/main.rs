@@ -1,7 +1,6 @@
 use crate::counter::Counter;
 use rmcp::ServiceExt;
 use rmcp::transport::stdio;
-use std::process::exit;
 
 mod counter;
 
