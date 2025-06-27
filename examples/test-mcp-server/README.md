@@ -7,6 +7,7 @@ A sample MCP server that implements a simple counter with increment, decrement, 
 ### SSE
 
 ```shell
+export PORT=8000
 TRANSPORT=sse cargo run
 ```
 

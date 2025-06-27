@@ -8,21 +8,22 @@ implementations.
 
 ```
 examples/
-├── simple/                     # Basic GPMCP Layer client example
-└── servers/                    # MCP server implementations
-    └── counter/                # Counter server example
+├── simple_stdio/               # Basic GPMCP Layer client example using stdio
+├── simple_sse/                 # Basic GPMCP Layer client example using SSE
+└── test-mcp-server             # Test MCP server implementation
 ```
 
-### Server Examples (`servers/`)
-
-Server implementations demonstrating different MCP server patterns.
-
-#### Counter Server (`servers/counter/`)
+### Server Examples (`test-mcp-server/`)
 
 A stateful MCP server that provides counter functionality with increment, decrement, and value retrieval operations.
-For more details, refer to the [Counter Server README](servers/counter/README.md).
+For more details, refer to the [test-mc-server README](test-mcp-server/README.md).
 
-### Simple Example (`simple/`)
+### Simple Example with stdio (`simple_stdio/`)
 
-A basic client example that demonstrates how to use the GPMCP Layer to interact with MCP servers.
-For more details on the simple client example, refer to the [Simple Client README](simple/README.md).
+A basic client example that demonstrates how to use the GPMCP Layer with StdIO to interact with MCP servers.
+For more details on the simple client example, refer to the [Simple Client README](simple_stdio/README.md).
+
+### Simple Example with SSE (`simple_sse/`)
+
+A basic client example that demonstrates how to use the GPMCP Layer with SSE to interact with MCP servers.
+For more details on the simple client example, refer to the [Simple Client README](simple_sse/README.md).

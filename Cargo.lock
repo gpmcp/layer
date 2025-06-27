@@ -235,6 +235,7 @@ dependencies = [
  "rmcp",
  "serde_json",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 
@@ -1713,7 +1714,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "simple"
+name = "simple_sse"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpmcp-layer",
+ "tokio",
+]
+
+[[package]]
+name = "simple_stdio"
 version = "0.1.0"
 dependencies = [
  "anyhow",

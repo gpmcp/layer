@@ -5,17 +5,16 @@ use std::path::PathBuf;
 async fn main() -> anyhow::Result<()> {
     // Build the RunnerConfig with the desired settings.
     let config = RunnerConfig::builder()
-        .name("counter") // Name of the tool
+        .name("test-mcp-server") // Name of the tool
         .version("0.0.0") // Version string
         .command("cargo") // Command to run
         .args(["run"]) // Arguments for the command
         .env("TRANSPORT", "stdio") // Set environment variable
         .working_directory(
-            // Set the working directory to the counter example server
+            // Set the working directory to the test-mcp-server example server
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("..")
-                .join("servers")
-                .join("counter"),
+                .join("test-mcp-server"),
         )
         .build()?;
 

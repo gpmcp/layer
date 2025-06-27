@@ -1,13 +1,12 @@
-# Simple GPMCP Layer Client Example
+# Simple_stdio GPMCP Layer Client Example
 
-A basic client example demonstrating how to use the GPMCP Layer library to interact with MCP.
+A basic client example demonstrating how to use the GPMCP Layer library to interact with MCP using StdIO transport.
 
 ## Purpose
 
 This example serves as an introduction to the GPMCP Layer library, demonstrating:
 
 - How to configure a `RunnerConfig` for connecting to MCP servers
-- Setting up transport mechanisms (stdio in this case)
 - Discovering available tools from a connected server
 - Basic error handling patterns
 

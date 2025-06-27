@@ -181,7 +181,7 @@ impl RunnerConfigBuilder {
         self.args = Some(args);
         self
     }
-    pub fn env<T: ToString>(&mut self, key: T, value: T) -> &mut Self {
+    pub fn env<K: ToString, V: ToString>(&mut self, key: K, value: V) -> &mut Self {
         let map = self.env.get_or_insert_with(HashMap::new);
         map.insert(key.to_string(), value.to_string());
 
