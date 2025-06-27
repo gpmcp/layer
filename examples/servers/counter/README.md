@@ -4,9 +4,14 @@ A sample MCP server that implements a simple counter with increment, decrement, 
 
 ### Running the Server
 
-The server uses the `TRANSPORT` environment variable to determine which transport mechanism to use. After setting up the
-environment, you can run the server using the following command:
+### SSE
 
-```bash
-cargo run
+```shell
+TRANSPORT=sse cargo run
+```
+
+### StdIO
+
+```shell
+TRANSPORT=stdio cargo run
 ```
