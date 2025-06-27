@@ -73,7 +73,7 @@ impl GpmcpError {
     pub fn is_permanent(&self) -> bool {
         matches!(
             self,
-            GpmcpError::ConfigurationError(_) 
+            GpmcpError::ConfigurationError(_)
                 | GpmcpError::Cancelled
                 | GpmcpError::PermissionDenied(_)
                 | GpmcpError::ResourceNotFound(_)

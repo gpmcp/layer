@@ -1,5 +1,5 @@
-use crate::{RunnerConfig, GpmcpError};
 use crate::runner::GpmcpRunnerInner;
+use crate::{GpmcpError, RunnerConfig};
 use backon::{BackoffBuilder, ExponentialBuilder, Retryable};
 use std::future::Future;
 use std::sync::Arc;
@@ -13,8 +13,10 @@ pub struct GpmcpLayer {
 impl GpmcpLayer {
     pub fn new(runner_config: RunnerConfig) -> Result<Self, GpmcpError> {
         // Validate retry config at construction time
-        runner_config.retry_config.validate()
-            .map_err(|e| GpmcpError::ConfigurationError(format!("Invalid retry config: {}", e)))?;
+        runner_config
+            .retry_config
+            .validate()
+            .map_err(|e| GpmcpError::ConfigurationError(format!("Invalid retry config: {e}")))?;
 
         Ok(Self {
             runner_config,
@@ -25,7 +27,7 @@ impl GpmcpLayer {
     /// Creates a configured retry strategy based on the current retry configuration
     fn create_retry_strategy(&self) -> backon::ExponentialBackoff {
         let retry_config = &self.runner_config.retry_config;
-        
+
         let mut retry_builder = ExponentialBuilder::default()
             .with_min_delay(std::time::Duration::from_millis(retry_config.min_delay_ms))
             .with_max_delay(std::time::Duration::from_millis(retry_config.max_delay_ms))
@@ -92,9 +94,7 @@ impl GpmcpLayer {
         if !self.is_healthy().await {
             // Create new inner instance and connect
             let inner = GpmcpRunnerInner::new(self.runner_config.clone());
-            inner
-                .connect()
-                .await?;
+            inner.connect().await?;
             *self.inner.lock().await = Some(inner);
         }
 
@@ -104,9 +104,7 @@ impl GpmcpLayer {
     pub async fn cancel(self) -> Result<(), GpmcpError> {
         let mut lock = self.inner.lock().await;
         if let Some(inner) = lock.take() {
-            inner
-                .cancel()
-                .await?;
+            inner.cancel().await?;
         }
         Ok(())
     }
@@ -114,9 +112,9 @@ impl GpmcpLayer {
     pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
-            let inner = lock
-                .as_ref()
-                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            let inner = lock.as_ref().ok_or_else(|| {
+                GpmcpError::InvalidState("Connection not established".to_string())
+            })?;
             inner.list_tools().await
         })
         .await
@@ -128,9 +126,9 @@ impl GpmcpLayer {
     ) -> Result<rmcp::model::CallToolResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
-            let inner = lock
-                .as_ref()
-                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            let inner = lock.as_ref().ok_or_else(|| {
+                GpmcpError::InvalidState("Connection not established".to_string())
+            })?;
             inner.call_tool(request.clone()).await
         })
         .await
@@ -139,9 +137,9 @@ impl GpmcpLayer {
     pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
-            let inner = lock
-                .as_ref()
-                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            let inner = lock.as_ref().ok_or_else(|| {
+                GpmcpError::InvalidState("Connection not established".to_string())
+            })?;
             inner.list_prompts().await
         })
         .await
@@ -150,9 +148,9 @@ impl GpmcpLayer {
     pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
-            let inner = lock
-                .as_ref()
-                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            let inner = lock.as_ref().ok_or_else(|| {
+                GpmcpError::InvalidState("Connection not established".to_string())
+            })?;
             inner.list_resources().await
         })
         .await
@@ -164,9 +162,9 @@ impl GpmcpLayer {
     ) -> Result<rmcp::model::GetPromptResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
-            let inner = lock
-                .as_ref()
-                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            let inner = lock.as_ref().ok_or_else(|| {
+                GpmcpError::InvalidState("Connection not established".to_string())
+            })?;
             inner.get_prompt(request.clone()).await
         })
         .await
@@ -178,9 +176,9 @@ impl GpmcpLayer {
     ) -> Result<rmcp::model::ReadResourceResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
-            let inner = lock
-                .as_ref()
-                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            let inner = lock.as_ref().ok_or_else(|| {
+                GpmcpError::InvalidState("Connection not established".to_string())
+            })?;
             inner.read_resource(request.clone()).await
         })
         .await
@@ -203,9 +201,9 @@ impl GpmcpLayer {
         // Use list_tools as health check with retry for robustness
         async {
             let lock = self.inner.lock().await;
-            let inner = lock
-                .as_ref()
-                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            let inner = lock.as_ref().ok_or_else(|| {
+                GpmcpError::InvalidState("Connection not established".to_string())
+            })?;
             inner.list_tools().await?;
             Ok::<_, GpmcpError>(())
         }

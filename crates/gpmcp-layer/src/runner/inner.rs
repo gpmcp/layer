@@ -34,7 +34,9 @@ impl GpmcpRunnerInner {
         // Create process manager if needed (for commands that need subprocess)
         let process_manager = ProcessManager::new(&self.runner_config)
             .await
-            .map_err(|e| GpmcpError::process_error(format!("Failed to create process manager: {}", e)))?;
+            .map_err(|e| {
+                GpmcpError::process_error(format!("Failed to create process manager: {e}"))
+            })?;
 
         // For SSE transport, start the server process first
         if matches!(self.runner_config.transport, crate::Transport::Sse { .. }) {
@@ -42,19 +44,25 @@ impl GpmcpRunnerInner {
             let _handle = process_manager
                 .start_server()
                 .await
-                .map_err(|e| GpmcpError::process_error(format!("Failed to start server: {}", e)))?;
+                .map_err(|e| GpmcpError::process_error(format!("Failed to start server: {e}")))?;
         }
 
         // Create transport manager
         let transport_manager = TransportManager::new(&self.runner_config)
             .await
-            .map_err(|e| GpmcpError::transport_error(format!("Failed to create transport: {}", e)))?;
+            .map_err(|e| {
+                GpmcpError::transport_error(format!("Failed to create transport: {e}"))
+            })?;
 
         // Create service coordinator
         let service_coordinator = ServiceCoordinator::new(transport_manager, &self.runner_config)
             .await
-            .map_err(|e| GpmcpError::service_initialization_failed(format!("Failed to create service coordinator: {}", e)))?;
-        
+            .map_err(|e| {
+                GpmcpError::service_initialization_failed(format!(
+                    "Failed to create service coordinator: {e}"
+                ))
+            })?;
+
         self.service_coordinator
             .write()
             .await
@@ -72,7 +80,7 @@ impl GpmcpRunnerInner {
             coordinator
                 .list_tools()
                 .await
-                .map_err(|e| GpmcpError::mcp_operation_failed(format!("list_tools failed: {}", e)))
+                .map_err(|e| GpmcpError::mcp_operation_failed(format!("list_tools failed: {e}")))
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -87,7 +95,7 @@ impl GpmcpRunnerInner {
             coordinator
                 .call_tool(request)
                 .await
-                .map_err(|e| GpmcpError::mcp_operation_failed(format!("call_tool failed: {}", e)))
+                .map_err(|e| GpmcpError::mcp_operation_failed(format!("call_tool failed: {e}")))
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -96,24 +104,20 @@ impl GpmcpRunnerInner {
     /// List available prompts from the MCP server
     pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            coordinator
-                .list_prompts()
-                .await
-                .map_err(|e| GpmcpError::mcp_operation_failed(format!("list_prompts failed: {}", e)))
+            coordinator.list_prompts().await.map_err(|e| {
+                GpmcpError::mcp_operation_failed(format!("list_prompts failed: {e}"))
+            })
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
     }
 
     /// List available resources from the MCP server
-    pub async fn list_resources(
-        &self,
-    ) -> Result<rmcp::model::ListResourcesResult, GpmcpError> {
+    pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            coordinator
-                .list_resources()
-                .await
-                .map_err(|e| GpmcpError::mcp_operation_failed(format!("list_resources failed: {}", e)))
+            coordinator.list_resources().await.map_err(|e| {
+                GpmcpError::mcp_operation_failed(format!("list_resources failed: {e}"))
+            })
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -128,7 +132,7 @@ impl GpmcpRunnerInner {
             coordinator
                 .get_prompt(request)
                 .await
-                .map_err(|e| GpmcpError::mcp_operation_failed(format!("get_prompt failed: {}", e)))
+                .map_err(|e| GpmcpError::mcp_operation_failed(format!("get_prompt failed: {e}")))
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -140,10 +144,9 @@ impl GpmcpRunnerInner {
         request: rmcp::model::ReadResourceRequestParam,
     ) -> Result<rmcp::model::ReadResourceResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            coordinator
-                .read_resource(request)
-                .await
-                .map_err(|e| GpmcpError::mcp_operation_failed(format!("read_resource failed: {}", e)))
+            coordinator.read_resource(request).await.map_err(|e| {
+                GpmcpError::mcp_operation_failed(format!("read_resource failed: {e}"))
+            })
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -166,7 +169,7 @@ impl GpmcpRunnerInner {
             .ok_or(GpmcpError::process_error("Process manager not found"))?
             .restart()
             .await
-            .map_err(|e| GpmcpError::process_error(format!("Failed to restart process: {}", e)))?;
+            .map_err(|e| GpmcpError::process_error(format!("Failed to restart process: {e}")))?;
         info!("Process restarted successfully");
         Ok(())
     }
@@ -185,18 +188,18 @@ impl GpmcpRunnerInner {
 
         // Cancel service first
         if let Some(coordinator) = service_coordinator.write().await.take() {
-            coordinator
-                .cancel()
-                .await
-                .map_err(|e| GpmcpError::service_initialization_failed(format!("Failed to cancel service: {}", e)))?;
+            coordinator.cancel().await.map_err(|e| {
+                GpmcpError::service_initialization_failed(format!(
+                    "Failed to cancel service: {e}"
+                ))
+            })?;
         }
 
         // Then cleanup process if exists
         if let Some(manager) = process_manager.write().await.take() {
-            manager
-                .cleanup()
-                .await
-                .map_err(|e| GpmcpError::process_error(format!("Failed to cleanup process: {}", e)))?;
+            manager.cleanup().await.map_err(|e| {
+                GpmcpError::process_error(format!("Failed to cleanup process: {e}"))
+            })?;
         }
 
         info!("GpmcpRunner cancelled successfully");
