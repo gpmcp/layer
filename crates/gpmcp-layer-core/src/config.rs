@@ -86,7 +86,9 @@ impl RetryConfig {
     /// Create a RetryConfig with no retries (fail fast)
     pub fn no_retry() -> Self {
         Self {
-            max_attempts: 1, // Only one attempt, no retries
+            max_attempts: 1,
+            retry_on_connection_failure: false,
+            retry_on_operation_failure: false,
             ..Default::default()
         }
     }
@@ -99,18 +101,15 @@ impl RetryConfig {
             ));
         }
 
-        // jitter_factor is a boolean, so no validation needed for range
-        // It's either true (use jitter) or false (no jitter)
-
-        if self.max_attempts > 10 {
-            return Err(crate::error::GpmcpError::ConfigurationError(
-                "max_attempts should not exceed 10 to avoid excessive retries".to_string(),
-            ));
-        }
-
         if self.max_delay_ms > 60_000 {
             return Err(crate::error::GpmcpError::ConfigurationError(
                 "max_delay_ms should not exceed 60 seconds".to_string(),
+            ));
+        }
+
+        if self.max_attempts < 1 {
+            return Err(crate::error::GpmcpError::ConfigurationError(
+                "max_attempts must be at least 1".to_string(),
             ));
         }
 
@@ -127,7 +126,7 @@ impl RetryConfig {
         std::time::Duration::from_millis(self.max_delay_ms)
     }
 
-    /// Check if retries are enabled (more than 1 attempt)
+    /// Check if retries are enabled (at least 1 attempt with retry flags enabled)
     pub fn retries_enabled(&self) -> bool {
         self.max_attempts > 0
             && (self.retry_on_connection_failure || self.retry_on_operation_failure)
@@ -261,6 +260,7 @@ mod tests {
 
         config.min_delay_ms = 100;
         config.max_delay_ms = 1000;
+        config.max_attempts = 0;
         assert!(config.validate().is_err());
     }
 
@@ -296,5 +296,5 @@ fn test_retry_attempts_logic() {
         retry_on_connection_failure: true,
         ..Default::default()
     };
-    assert!(!config.retries_enabled()); // 1 attempt = no retries
+    assert!(config.retries_enabled()); // 1 attempt with retry flags = retries enabled
 }
