@@ -1,37 +1,27 @@
 # GPMCP Layer Examples
 
-This directory contains examples demonstrating how to use the GPMCP Layer library for building Model Context Protocol (
-MCP) applications in Rust. These examples showcase different patterns and use cases for both client and server
+This directory contains examples demonstrating how to use the GPMCP Layer library for building
+MCP applications in Rust. These examples showcase different patterns and use cases for both client and server
 implementations.
 
-## Quick Start
+## Project Structure
 
-### To run any example
- Navigate to its directory and use:
-
-- For example: for the simple client example, you can run:
-
-```bash
-cd examples/simple
-cargo run
 ```
-
-This will:
-
-1. Configure a connection to the counter server
-2. List available tools
-3. Print the tool names
-
-### To run any server example
- Navigate to the server example directory and run: 
-
-- For stdio transport:
-```bash
-TRANSPORT=stdio cargo run
+examples/
+├── README.md                   # Overview of all examples
+├── simple/                     # Basic GPMCP Layer client example
+│   ├── Cargo.toml              # Client example dependencies
+│   ├── README.md               # Client documentation
+│   └── src/
+│       └── main.rs             # Simple client implementation
+└── servers/                    # MCP server implementations
+    └── counter/                # Counter server example
+        ├── Cargo.toml          # Server dependencies
+        ├── README.md           # Server documentation
+        └── src/
+            ├── main.rs         # Server entry point and transport setup
+            └── counter.rs      # Counter implementation and MCP handlers
 ```
-
-
-## Example Structure
 
 ### Server Examples (`servers/`)
 

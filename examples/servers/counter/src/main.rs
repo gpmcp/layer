@@ -23,8 +23,7 @@ async fn start() -> anyhow::Result<()> {
         Ok("sse") => todo!(),
         Ok("stdio") => Ok(start_stdio().await?),
         _ => {
-            println!("TRANSPORT env var not set");
-            exit(1);
+            panic!("TRANSPORT environment variable must be set to either 'sse' or 'stdio'");
         }
     }
 }

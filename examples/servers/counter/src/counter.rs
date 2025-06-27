@@ -2,8 +2,8 @@
 use std::sync::Arc;
 
 use rmcp::{
-    handler::server::router::tool::ToolRouter, model::*, service::RequestContext, tool,
-    tool_handler, tool_router, Error as McpError, RoleServer, ServerHandler,
+    Error as McpError, RoleServer, ServerHandler, handler::server::router::tool::ToolRouter,
+    model::*, service::RequestContext, tool, tool_handler, tool_router,
 };
 use serde_json::json;
 use tokio::sync::Mutex;
