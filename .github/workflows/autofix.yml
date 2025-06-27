@@ -1,0 +1,42 @@
+name: autofix.ci
+env:
+  RUSTFLAGS: -Dwarnings
+on:
+  pull_request:
+    types:
+    - opened
+    - synchronize
+    - reopened
+    branches:
+    - main
+  push:
+    branches:
+    - main
+jobs:
+  lint:
+    name: Lint Fix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - run: sudo apt-get install -y libsqlite3-dev
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    - name: Setup Rust Toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: nightly
+        components: clippy, rustfmt
+        cache: true
+        cache-directories: |-
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+    - name: Cargo Fmt
+      run: cargo +nightly fmt --all
+    - name: Cargo Clippy
+      run: cargo +nightly clippy --fix --allow-dirty --all-features --workspace -- -D warnings
+    - uses: autofix-ci/action@551dded8c6cc8a1054039c8bc0b8b48c51dfc6ef
+    concurrency:
+      group: autofix-${{github.ref}}
+      cancel-in-progress: false
