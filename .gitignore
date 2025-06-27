@@ -2,3 +2,4 @@
 /.mcp.json
 /.idea
 /.env
+/examples/test-mcp-server/target/*

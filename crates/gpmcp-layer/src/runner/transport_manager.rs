@@ -71,7 +71,7 @@ impl TransportManager {
 
         // Poll the server to check if it's ready using list_tools request
         // Use shorter timeout for faster failure in test environments
-        Self::poll_server_readiness(&url_string, 10, 100).await?;
+        Self::poll_server_readiness(&url_string, 10, 1000).await?;
 
         // Create SSE transport
         let transport = SseClientTransport::start(url_string)

@@ -67,11 +67,11 @@ mod tests {
     #[test]
     fn test_error_display() {
         let error = GpmcpError::ProcessError("test".to_string());
-        let display = format!("{}", error);
+        let display = format!("{error}");
         assert!(display.contains("Process management error"));
 
         let error = GpmcpError::TransportError("connection failed".to_string());
-        let display = format!("{}", error);
+        let display = format!("{error}");
         assert!(display.contains("Transport error"));
     }
 
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn test_error_debug_format() {
         let error = GpmcpError::ProcessError("test command".to_string());
-        let debug_str = format!("{:?}", error);
+        let debug_str = format!("{error:?}");
         assert!(debug_str.contains("ProcessError"));
         assert!(debug_str.contains("test command"));
     }
