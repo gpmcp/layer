@@ -8,19 +8,9 @@ implementations.
 
 ```
 examples/
-├── README.md                   # Overview of all examples
 ├── simple/                     # Basic GPMCP Layer client example
-│   ├── Cargo.toml              # Client example dependencies
-│   ├── README.md               # Client documentation
-│   └── src/
-│       └── main.rs             # Simple client implementation
 └── servers/                    # MCP server implementations
     └── counter/                # Counter server example
-        ├── Cargo.toml          # Server dependencies
-        ├── README.md           # Server documentation
-        └── src/
-            ├── main.rs         # Server entry point and transport setup
-            └── counter.rs      # Counter implementation and MCP handlers
 ```
 
 ### Server Examples (`servers/`)
