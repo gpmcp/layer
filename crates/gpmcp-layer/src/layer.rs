@@ -1,7 +1,6 @@
-use crate::RunnerConfig;
+use crate::{RunnerConfig, GpmcpError};
 use crate::runner::GpmcpRunnerInner;
-use anyhow::{Context, Result};
-use backon::{BackoffBuilder, ExponentialBackoff, ExponentialBuilder, Retryable};
+use backon::{BackoffBuilder, ExponentialBuilder, Retryable};
 use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -12,9 +11,10 @@ pub struct GpmcpLayer {
 }
 
 impl GpmcpLayer {
-    pub fn new(runner_config: RunnerConfig) -> anyhow::Result<Self> {
+    pub fn new(runner_config: RunnerConfig) -> Result<Self, GpmcpError> {
         // Validate retry config at construction time
-        runner_config.retry_config.validate()?;
+        runner_config.retry_config.validate()
+            .map_err(|e| GpmcpError::ConfigurationError(format!("Invalid retry config: {}", e)))?;
 
         Ok(Self {
             runner_config,
@@ -22,45 +22,40 @@ impl GpmcpLayer {
         })
     }
 
-    /// Create a new ExponentialBackoff strategy based on the current retry config
-    /// This is called each time we need to retry, but the creation is lightweight
-    fn create_retry_strategy(&self) -> Option<ExponentialBackoff> {
+    /// Creates a configured retry strategy based on the current retry configuration
+    fn create_retry_strategy(&self) -> backon::ExponentialBackoff {
         let retry_config = &self.runner_config.retry_config;
+        
+        let mut retry_builder = ExponentialBuilder::default()
+            .with_min_delay(std::time::Duration::from_millis(retry_config.min_delay_ms))
+            .with_max_delay(std::time::Duration::from_millis(retry_config.max_delay_ms))
+            .with_max_times(retry_config.max_attempts as usize);
 
-        if !retry_config.retries_enabled() {
-            return None;
+        if retry_config.jitter_factor {
+            retry_builder = retry_builder.with_jitter();
         }
 
-        // max_attempts is total attempts (initial + retries)
-        let max_retries = retry_config.max_attempts.max(1) as usize;
-
-        let strategy = if retry_config.use_exponential_backoff {
-            ExponentialBuilder::default()
-                .with_min_delay(retry_config.min_delay())
-                .with_max_delay(retry_config.max_delay())
-                .with_max_times(max_retries)
-                .build()
-        } else {
-            // For fixed delay, use min_delay as the fixed interval
-            ExponentialBuilder::default()
-                .with_min_delay(retry_config.min_delay())
-                .with_max_delay(retry_config.min_delay()) // Same as min for fixed delay
-                .with_max_times(max_retries)
-                .build()
-        };
-
-        Some(strategy)
+        retry_builder.build()
     }
 
     /// Generic retry mechanism for operations that may fail due to connection issues
-    /// Creates retry strategy on-demand based on stored configuration
-    async fn attempt_with_retry<T, F, Fut>(&self, operation: F) -> Result<T>
+    /// Uses backon library with GpmcpError.is_retryable() to determine if an error should be retried
+    async fn attempt_with_retry<T, F, Fut>(&self, operation: F) -> Result<T, GpmcpError>
     where
         F: Fn() -> Fut + Send + Sync,
-        Fut: Future<Output = Result<T>> + Send,
+        Fut: Future<Output = Result<T, GpmcpError>> + Send,
         T: Send,
     {
         let retry_config = &self.runner_config.retry_config;
+
+        // If retries are disabled, try once
+        if !retry_config.retries_enabled() {
+            self.ensure_connected_internal().await?;
+            return operation().await;
+        }
+
+        // Create the retry strategy
+        let retry_strategy = self.create_retry_strategy();
 
         // Create the operation closure that handles connection management
         let operation_with_connection = || async {
@@ -68,9 +63,9 @@ impl GpmcpLayer {
             self.ensure_connected_internal().await?;
 
             // Attempt the operation
-            operation().await.inspect_err(|_e| {
-                // Clear connection on failure if operation retries are enabled
-                if retry_config.retry_on_operation_failure {
+            operation().await.inspect_err(|e| {
+                // Only restart process if the error is retryable and operation retries are enabled
+                if e.is_retryable() && retry_config.retry_on_operation_failure {
                     tokio::spawn({
                         let inner = self.inner.clone();
                         async move {
@@ -84,51 +79,45 @@ impl GpmcpLayer {
             })
         };
 
-        // If retries are disabled, try once (no retries, but still one attempt)
-        if let Some(retry_strategy) = self.create_retry_strategy() {
-            operation_with_connection.retry(retry_strategy).await
-        } else {
-            operation_with_connection().await
-        }
+        // Use backon with custom retry condition that respects is_retryable
+        operation_with_connection
+            .retry(retry_strategy)
+            .when(|e: &GpmcpError| e.is_retryable())
+            .await
     }
 
     /// Internal connection management - ensures connection without retry logic
     /// This is used by attempt_with_retry to avoid circular dependencies
-    async fn ensure_connected_internal(&self) -> Result<()> {
+    async fn ensure_connected_internal(&self) -> Result<(), GpmcpError> {
         if !self.is_healthy().await {
             // Create new inner instance and connect
             let inner = GpmcpRunnerInner::new(self.runner_config.clone());
             inner
                 .connect()
-                .await
-                .context("Failed to connect to service")?;
+                .await?;
             *self.inner.lock().await = Some(inner);
         }
 
         Ok(())
     }
 
-    pub async fn cancel(self) -> Result<()> {
+    pub async fn cancel(self) -> Result<(), GpmcpError> {
         let mut lock = self.inner.lock().await;
         if let Some(inner) = lock.take() {
             inner
                 .cancel()
-                .await
-                .context("Failed to cancel GpmcpRunner")?;
+                .await?;
         }
         Ok(())
     }
 
-    pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult> {
+    pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
             let inner = lock
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            inner
-                .list_tools()
-                .await
-                .map_err(|e| anyhow::anyhow!("list_tools failed: {}", e))
+                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            inner.list_tools().await
         })
         .await
     }
@@ -136,44 +125,35 @@ impl GpmcpLayer {
     pub async fn call_tool(
         &self,
         request: rmcp::model::CallToolRequestParam,
-    ) -> Result<rmcp::model::CallToolResult> {
+    ) -> Result<rmcp::model::CallToolResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
             let inner = lock
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            inner
-                .call_tool(request.clone())
-                .await
-                .map_err(|e| anyhow::anyhow!("call_tool failed: {}", e))
+                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            inner.call_tool(request.clone()).await
         })
         .await
     }
 
-    pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult> {
+    pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
             let inner = lock
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            inner
-                .list_prompts()
-                .await
-                .map_err(|e| anyhow::anyhow!("list_prompts failed: {}", e))
+                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            inner.list_prompts().await
         })
         .await
     }
 
-    pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult> {
+    pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
             let inner = lock
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            inner
-                .list_resources()
-                .await
-                .map_err(|e| anyhow::anyhow!("list_resources failed: {}", e))
+                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            inner.list_resources().await
         })
         .await
     }
@@ -181,16 +161,13 @@ impl GpmcpLayer {
     pub async fn get_prompt(
         &self,
         request: rmcp::model::GetPromptRequestParam,
-    ) -> Result<rmcp::model::GetPromptResult> {
+    ) -> Result<rmcp::model::GetPromptResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
             let inner = lock
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            inner
-                .get_prompt(request.clone())
-                .await
-                .map_err(|e| anyhow::anyhow!("get_prompt failed: {}", e))
+                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            inner.get_prompt(request.clone()).await
         })
         .await
     }
@@ -198,16 +175,13 @@ impl GpmcpLayer {
     pub async fn read_resource(
         &self,
         request: rmcp::model::ReadResourceRequestParam,
-    ) -> Result<rmcp::model::ReadResourceResult> {
+    ) -> Result<rmcp::model::ReadResourceResult, GpmcpError> {
         self.attempt_with_retry(|| async {
             let lock = self.inner.lock().await;
             let inner = lock
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            inner
-                .read_resource(request.clone())
-                .await
-                .map_err(|e| anyhow::anyhow!("read_resource failed: {}", e))
+                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            inner.read_resource(request.clone()).await
         })
         .await
     }
@@ -231,12 +205,9 @@ impl GpmcpLayer {
             let lock = self.inner.lock().await;
             let inner = lock
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Connection not established"))?;
-            inner
-                .list_tools()
-                .await
-                .map_err(|e| anyhow::anyhow!("Health check failed: {}", e))?;
-            Ok::<_, anyhow::Error>(())
+                .ok_or_else(|| GpmcpError::InvalidState("Connection not established".to_string()))?;
+            inner.list_tools().await?;
+            Ok::<_, GpmcpError>(())
         }
         .await
         .is_ok()

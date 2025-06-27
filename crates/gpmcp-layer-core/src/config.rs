@@ -26,7 +26,7 @@ pub struct RetryConfig {
     /// Jitter factor for randomizing delays (0.0 to 1.0)
     /// 0.0 = no jitter, 1.0 = up to 100% jitter
     #[serde(default = "default_jitter_factor")]
-    pub jitter_factor: f64,
+    pub jitter_factor: bool,
 
     /// Whether to retry on connection failures
     #[serde(default = "default_retry_on_connection_failure")]
@@ -64,7 +64,7 @@ impl RetryConfig {
             max_delay_ms: 10_000, // 10 seconds
             max_attempts: 5,
             use_exponential_backoff: true,
-            jitter_factor: 0.1,
+            jitter_factor: true,
             retry_on_connection_failure: true,
             retry_on_operation_failure: true,
         }
@@ -77,7 +77,7 @@ impl RetryConfig {
             max_delay_ms: 2_000, // 2 seconds
             max_attempts: 2,
             use_exponential_backoff: false,
-            jitter_factor: 0.0,
+            jitter_factor: true,
             retry_on_connection_failure: true,
             retry_on_operation_failure: false,
         }
@@ -86,36 +86,32 @@ impl RetryConfig {
     /// Create a RetryConfig with no retries (fail fast)
     pub fn no_retry() -> Self {
         Self {
-            min_delay_ms: 0,
-            max_delay_ms: 0,
-            max_attempts: 1, // One attempt, no retries
-            use_exponential_backoff: false,
-            jitter_factor: 0.0,
-            retry_on_connection_failure: false,
-            retry_on_operation_failure: false,
+            max_attempts: 1, // Only one attempt, no retries
+            ..Default::default()
         }
     }
 
     /// Validate the configuration and return errors if invalid
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> Result<(), crate::error::GpmcpError> {
         if self.min_delay_ms > self.max_delay_ms {
-            return Err(anyhow::anyhow!(
-                "min_delay_ms cannot be greater than max_delay_ms"
+            return Err(crate::error::GpmcpError::ConfigurationError(
+                "min_delay_ms cannot be greater than max_delay_ms".to_string(),
             ));
         }
 
-        if self.jitter_factor < 0.0 || self.jitter_factor > 1.0 {
-            return Err(anyhow::anyhow!("jitter_factor must be between 0.0 and 1.0"));
-        }
+        // jitter_factor is a boolean, so no validation needed for range
+        // It's either true (use jitter) or false (no jitter)
 
         if self.max_attempts > 10 {
-            return Err(anyhow::anyhow!(
-                "max_attempts should not exceed 10 to avoid excessive retries"
+            return Err(crate::error::GpmcpError::ConfigurationError(
+                "max_attempts should not exceed 10 to avoid excessive retries".to_string(),
             ));
         }
 
         if self.max_delay_ms > 60_000 {
-            return Err(anyhow::anyhow!("max_delay_ms should not exceed 60 seconds"));
+            return Err(crate::error::GpmcpError::ConfigurationError(
+                "max_delay_ms should not exceed 60 seconds".to_string(),
+            ));
         }
 
         Ok(())
@@ -133,7 +129,7 @@ impl RetryConfig {
 
     /// Check if retries are enabled (more than 1 attempt)
     pub fn retries_enabled(&self) -> bool {
-        self.max_attempts > 1
+        self.max_attempts > 0
             && (self.retry_on_connection_failure || self.retry_on_operation_failure)
     }
 }
@@ -210,8 +206,8 @@ fn default_max_attempts() -> u32 {
 fn default_use_exponential_backoff() -> bool {
     true
 }
-fn default_jitter_factor() -> f64 {
-    0.1
+fn default_jitter_factor() -> bool {
+    true
 }
 fn default_retry_on_connection_failure() -> bool {
     true
@@ -265,7 +261,6 @@ mod tests {
 
         config.min_delay_ms = 100;
         config.max_delay_ms = 1000;
-        config.jitter_factor = 1.5;
         assert!(config.validate().is_err());
     }
 
