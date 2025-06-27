@@ -1729,7 +1729,6 @@ dependencies = [
  "anyhow",
  "gpmcp-layer",
  "tokio",
- "tracing-subscriber",
 ]
 
 [[package]]
