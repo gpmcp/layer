@@ -79,21 +79,6 @@ impl ProcessManager {
         Ok(handle)
     }
 
-    /// Restart the process manager (useful for retry logic)
-    pub async fn restart(&mut self) -> Result<()> {
-        info!("Restarting ProcessManager");
-
-        // First cleanup existing processes
-        self.cleanup().await?;
-
-        // Create a new platform manager
-        let platform_manager = PlatformProcessManagerFactory::create_process_manager();
-        self.platform_manager = Arc::from(platform_manager);
-
-        info!("ProcessManager restarted successfully");
-        Ok(())
-    }
-
     /// Cleanup all tracked processes and resources
     pub async fn cleanup(&self) -> Result<()> {
         info!("Starting ProcessManager cleanup");

@@ -31,10 +31,6 @@ pub struct RetryConfig {
     /// Whether to retry on connection failures
     #[serde(default = "default_retry_on_connection_failure")]
     pub retry_on_connection_failure: bool,
-
-    /// Whether to retry on operation failures (like list_tools, call_tool)
-    #[serde(default = "default_retry_on_operation_failure")]
-    pub retry_on_operation_failure: bool,
 }
 
 impl Default for RetryConfig {
@@ -46,7 +42,6 @@ impl Default for RetryConfig {
             use_exponential_backoff: default_use_exponential_backoff(),
             jitter_factor: default_jitter_factor(),
             retry_on_connection_failure: default_retry_on_connection_failure(),
-            retry_on_operation_failure: default_retry_on_operation_failure(),
         }
     }
 }
@@ -66,7 +61,6 @@ impl RetryConfig {
             use_exponential_backoff: true,
             jitter_factor: true,
             retry_on_connection_failure: true,
-            retry_on_operation_failure: true,
         }
     }
 
@@ -79,17 +73,18 @@ impl RetryConfig {
             use_exponential_backoff: false,
             jitter_factor: true,
             retry_on_connection_failure: true,
-            retry_on_operation_failure: false,
         }
     }
 
     /// Create a RetryConfig with no retries (fail fast)
     pub fn no_retry() -> Self {
         Self {
-            max_attempts: 1,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            max_attempts: 0,
+            use_exponential_backoff: false,
+            jitter_factor: false,
             retry_on_connection_failure: false,
-            retry_on_operation_failure: false,
-            ..Default::default()
         }
     }
 
@@ -106,13 +101,6 @@ impl RetryConfig {
                 "max_delay_ms should not exceed 60 seconds".to_string(),
             ));
         }
-
-        if self.max_attempts < 1 {
-            return Err(crate::error::GpmcpError::ConfigurationError(
-                "max_attempts must be at least 1".to_string(),
-            ));
-        }
-
         Ok(())
     }
 
@@ -128,8 +116,7 @@ impl RetryConfig {
 
     /// Check if retries are enabled (at least 1 attempt with retry flags enabled)
     pub fn retries_enabled(&self) -> bool {
-        self.max_attempts > 0
-            && (self.retry_on_connection_failure || self.retry_on_operation_failure)
+        self.max_attempts > 0 && self.retry_on_connection_failure
     }
 }
 
@@ -211,9 +198,6 @@ fn default_jitter_factor() -> bool {
 fn default_retry_on_connection_failure() -> bool {
     true
 }
-fn default_retry_on_operation_failure() -> bool {
-    true
-}
 
 #[cfg(test)]
 mod tests {
@@ -278,7 +262,6 @@ fn test_no_retry_behavior() {
     assert_eq!(config.max_attempts, 1);
     assert!(!config.retries_enabled()); // No retries, but still 1 attempt
     assert!(!config.retry_on_connection_failure);
-    assert!(!config.retry_on_operation_failure);
 }
 
 #[test]

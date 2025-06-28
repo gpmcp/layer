@@ -66,6 +66,7 @@ impl GpmcpError {
                 | GpmcpError::ServerNotReady(_)
                 | GpmcpError::NetworkError(_)
                 | GpmcpError::ServiceInitializationFailed(_)
+                | GpmcpError::McpOperationFailed(_)
         )
     }
 

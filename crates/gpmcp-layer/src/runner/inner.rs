@@ -8,22 +8,30 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
-pub struct GpmcpRunnerInner {
+pub struct Initialized; 
+
+pub struct Uninitialized;
+
+#[derive(Clone)]
+pub struct GpmcpRunnerInner<Status> {
     cancellation_token: Arc<CancellationToken>,
     runner_config: RunnerConfig,
     service_coordinator: Arc<RwLock<Option<ServiceCoordinator>>>,
     process_manager: Arc<RwLock<Option<ProcessManager>>>,
+    _status: std::marker::PhantomData<Status>,
 }
-impl GpmcpRunnerInner {
+
+impl GpmcpRunnerInner<Uninitialized> {
     pub fn new(runner_config: RunnerConfig) -> Self {
         Self {
             cancellation_token: Arc::new(CancellationToken::new()),
             runner_config,
             service_coordinator: Arc::new(RwLock::new(None)),
             process_manager: Arc::new(RwLock::new(None)),
+            _status: Default::default(),
         }
     }
-    pub async fn connect(&self) -> Result<(), GpmcpError> {
+    pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> {
         info!(
             "Creating GpmcpRunner for server: {}",
             self.runner_config.name
@@ -67,11 +75,18 @@ impl GpmcpRunnerInner {
             .replace(service_coordinator);
         self.process_manager.write().await.replace(process_manager);
 
-        Ok(())
+        Ok(GpmcpRunnerInner {
+            cancellation_token: self.cancellation_token.clone(),
+            runner_config: self.runner_config.clone(),
+            service_coordinator: self.service_coordinator.clone(),
+            process_manager: self.process_manager.clone(),
+            _status: Default::default(),
+        })
     }
 }
 
-impl GpmcpRunnerInner {
+
+impl GpmcpRunnerInner<Initialized> {
     /// List available tools from the MCP server
     pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
@@ -160,21 +175,8 @@ impl GpmcpRunnerInner {
             None
         }
     }
-    /// Restart the process (useful for retry logic)
-    pub async fn restart_process(&mut self) -> Result<(), GpmcpError> {
-        self.process_manager
-            .write()
-            .await
-            .as_mut()
-            .ok_or(GpmcpError::process_error("Process manager not found"))?
-            .restart()
-            .await
-            .map_err(|e| GpmcpError::process_error(format!("Failed to restart process: {e}")))?;
-        info!("Process restarted successfully");
-        Ok(())
-    }
 
-    pub async fn cancel(self) -> Result<(), GpmcpError> {
+    pub async fn cancel(&self) -> Result<(), GpmcpError> {
         info!("Cancelling GpmcpRunner");
 
         // Destructure self to move out the components
