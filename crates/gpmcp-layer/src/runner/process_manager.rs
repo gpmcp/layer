@@ -241,7 +241,7 @@ mod tests {
         // Wait a bit for process to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
     }
-    
+
     #[tokio::test]
     async fn test_cleanup_functionality() {
         let mut config = create_test_config();

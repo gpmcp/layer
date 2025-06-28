@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
-pub struct Initialized; 
+pub struct Initialized;
 
 pub struct Uninitialized;
 
@@ -84,7 +84,6 @@ impl GpmcpRunnerInner<Uninitialized> {
         })
     }
 }
-
 
 impl GpmcpRunnerInner<Initialized> {
     /// List available tools from the MCP server
