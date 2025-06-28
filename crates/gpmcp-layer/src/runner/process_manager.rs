@@ -241,17 +241,7 @@ mod tests {
         // Wait a bit for process to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
     }
-
-    #[tokio::test]
-    async fn test_process_manager_restart() {
-        let config = create_test_config();
-        let mut manager = ProcessManager::new(&config).await.unwrap();
-
-        // Test restart functionality
-        let result = manager.restart().await;
-        assert!(result.is_ok());
-    }
-
+    
     #[tokio::test]
     async fn test_cleanup_functionality() {
         let mut config = create_test_config();

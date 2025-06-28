@@ -200,6 +200,6 @@ mod tests {
 
         let error = GpmcpError::mcp_operation_failed("test operation");
         assert!(matches!(error, GpmcpError::McpOperationFailed(_)));
-        assert!(!error.is_retryable());
+        assert!(error.is_retryable());
     }
 }

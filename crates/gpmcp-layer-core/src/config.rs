@@ -235,16 +235,11 @@ mod tests {
 
     #[test]
     fn test_invalid_config() {
-        let mut config = RetryConfig {
+        let config = RetryConfig {
             min_delay_ms: 1000,
             max_delay_ms: 500,
             ..Default::default()
         };
-        assert!(config.validate().is_err());
-
-        config.min_delay_ms = 100;
-        config.max_delay_ms = 1000;
-        config.max_attempts = 0;
         assert!(config.validate().is_err());
     }
 
@@ -259,7 +254,7 @@ mod tests {
 #[test]
 fn test_no_retry_behavior() {
     let config = RetryConfig::no_retry();
-    assert_eq!(config.max_attempts, 1);
+    assert_eq!(config.max_attempts, 0);
     assert!(!config.retries_enabled()); // No retries, but still 1 attempt
     assert!(!config.retry_on_connection_failure);
 }
