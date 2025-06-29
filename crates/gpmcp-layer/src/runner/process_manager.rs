@@ -79,21 +79,6 @@ impl ProcessManager {
         Ok(handle)
     }
 
-    /// Restart the process manager (useful for retry logic)
-    pub async fn restart(&mut self) -> Result<()> {
-        info!("Restarting ProcessManager");
-
-        // First cleanup existing processes
-        self.cleanup().await?;
-
-        // Create a new platform manager
-        let platform_manager = PlatformProcessManagerFactory::create_process_manager();
-        self.platform_manager = Arc::from(platform_manager);
-
-        info!("ProcessManager restarted successfully");
-        Ok(())
-    }
-
     /// Cleanup all tracked processes and resources
     pub async fn cleanup(&self) -> Result<()> {
         info!("Starting ProcessManager cleanup");
@@ -255,16 +240,6 @@ mod tests {
 
         // Wait a bit for process to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-    }
-
-    #[tokio::test]
-    async fn test_process_manager_restart() {
-        let config = create_test_config();
-        let mut manager = ProcessManager::new(&config).await.unwrap();
-
-        // Test restart functionality
-        let result = manager.restart().await;
-        assert!(result.is_ok());
     }
 
     #[tokio::test]

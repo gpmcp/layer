@@ -26,15 +26,11 @@ pub struct RetryConfig {
     /// Jitter factor for randomizing delays (0.0 to 1.0)
     /// 0.0 = no jitter, 1.0 = up to 100% jitter
     #[serde(default = "default_jitter_factor")]
-    pub jitter_factor: f64,
+    pub jitter_factor: bool,
 
     /// Whether to retry on connection failures
     #[serde(default = "default_retry_on_connection_failure")]
     pub retry_on_connection_failure: bool,
-
-    /// Whether to retry on operation failures (like list_tools, call_tool)
-    #[serde(default = "default_retry_on_operation_failure")]
-    pub retry_on_operation_failure: bool,
 }
 
 impl Default for RetryConfig {
@@ -46,7 +42,6 @@ impl Default for RetryConfig {
             use_exponential_backoff: default_use_exponential_backoff(),
             jitter_factor: default_jitter_factor(),
             retry_on_connection_failure: default_retry_on_connection_failure(),
-            retry_on_operation_failure: default_retry_on_operation_failure(),
         }
     }
 }
@@ -64,9 +59,8 @@ impl RetryConfig {
             max_delay_ms: 10_000, // 10 seconds
             max_attempts: 5,
             use_exponential_backoff: true,
-            jitter_factor: 0.1,
+            jitter_factor: true,
             retry_on_connection_failure: true,
-            retry_on_operation_failure: true,
         }
     }
 
@@ -77,9 +71,8 @@ impl RetryConfig {
             max_delay_ms: 2_000, // 2 seconds
             max_attempts: 2,
             use_exponential_backoff: false,
-            jitter_factor: 0.0,
+            jitter_factor: true,
             retry_on_connection_failure: true,
-            retry_on_operation_failure: false,
         }
     }
 
@@ -88,36 +81,26 @@ impl RetryConfig {
         Self {
             min_delay_ms: 0,
             max_delay_ms: 0,
-            max_attempts: 1, // One attempt, no retries
+            max_attempts: 0,
             use_exponential_backoff: false,
-            jitter_factor: 0.0,
+            jitter_factor: false,
             retry_on_connection_failure: false,
-            retry_on_operation_failure: false,
         }
     }
 
     /// Validate the configuration and return errors if invalid
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> Result<(), crate::error::GpmcpError> {
         if self.min_delay_ms > self.max_delay_ms {
-            return Err(anyhow::anyhow!(
-                "min_delay_ms cannot be greater than max_delay_ms"
-            ));
-        }
-
-        if self.jitter_factor < 0.0 || self.jitter_factor > 1.0 {
-            return Err(anyhow::anyhow!("jitter_factor must be between 0.0 and 1.0"));
-        }
-
-        if self.max_attempts > 10 {
-            return Err(anyhow::anyhow!(
-                "max_attempts should not exceed 10 to avoid excessive retries"
+            return Err(crate::error::GpmcpError::ConfigurationError(
+                "min_delay_ms cannot be greater than max_delay_ms".to_string(),
             ));
         }
 
         if self.max_delay_ms > 60_000 {
-            return Err(anyhow::anyhow!("max_delay_ms should not exceed 60 seconds"));
+            return Err(crate::error::GpmcpError::ConfigurationError(
+                "max_delay_ms should not exceed 60 seconds".to_string(),
+            ));
         }
-
         Ok(())
     }
 
@@ -131,10 +114,9 @@ impl RetryConfig {
         std::time::Duration::from_millis(self.max_delay_ms)
     }
 
-    /// Check if retries are enabled (more than 1 attempt)
+    /// Check if retries are enabled (at least 1 attempt with retry flags enabled)
     pub fn retries_enabled(&self) -> bool {
-        self.max_attempts > 1
-            && (self.retry_on_connection_failure || self.retry_on_operation_failure)
+        self.max_attempts > 0 && self.retry_on_connection_failure
     }
 }
 
@@ -210,13 +192,10 @@ fn default_max_attempts() -> u32 {
 fn default_use_exponential_backoff() -> bool {
     true
 }
-fn default_jitter_factor() -> f64 {
-    0.1
-}
-fn default_retry_on_connection_failure() -> bool {
+fn default_jitter_factor() -> bool {
     true
 }
-fn default_retry_on_operation_failure() -> bool {
+fn default_retry_on_connection_failure() -> bool {
     true
 }
 
@@ -256,16 +235,11 @@ mod tests {
 
     #[test]
     fn test_invalid_config() {
-        let mut config = RetryConfig {
+        let config = RetryConfig {
             min_delay_ms: 1000,
             max_delay_ms: 500,
             ..Default::default()
         };
-        assert!(config.validate().is_err());
-
-        config.min_delay_ms = 100;
-        config.max_delay_ms = 1000;
-        config.jitter_factor = 1.5;
         assert!(config.validate().is_err());
     }
 
@@ -280,10 +254,9 @@ mod tests {
 #[test]
 fn test_no_retry_behavior() {
     let config = RetryConfig::no_retry();
-    assert_eq!(config.max_attempts, 1);
+    assert_eq!(config.max_attempts, 0);
     assert!(!config.retries_enabled()); // No retries, but still 1 attempt
     assert!(!config.retry_on_connection_failure);
-    assert!(!config.retry_on_operation_failure);
 }
 
 #[test]
@@ -301,5 +274,5 @@ fn test_retry_attempts_logic() {
         retry_on_connection_failure: true,
         ..Default::default()
     };
-    assert!(!config.retries_enabled()); // 1 attempt = no retries
+    assert!(config.retries_enabled()); // 1 attempt with retry flags = retries enabled
 }

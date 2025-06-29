@@ -24,8 +24,8 @@ optimizations for both Unix and Windows systems.
 The project is organized as a Rust workspace with the following crates:
 
 ```
-├── gpmcp-layer-core/     # Platform-independent traits and configurations
 ├── gpmcp-layer/          # Main library with high-level API
+├── gpmcp-layer-core/     # Platform-independent traits and configurations
 ├── gpmcp-layer-unix/     # Unix-specific process management
 └── gpmcp-layer-windows/  # Windows-specific process management
 ```
@@ -43,7 +43,8 @@ tokio = { version = "1.0", features = ["full"] }
 ### Basic Usage
 
 ```rust
-use gpmcp_layer::{GpmcpLayer, RunnerConfig, Transport};
+use std::borrow::Cow;
+use gpmcp_layer::{CallToolRequestParam, GpmcpLayer, RunnerConfig, Transport};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -58,8 +59,8 @@ async fn main() -> anyhow::Result<()> {
         })
         .build()?;
 
-    // Create and start the layer
-    let layer = GpmcpLayer::new(config)?;
+    // Create and connect the layer to the server
+    let layer = GpmcpLayer::new(config)?.connect().await?;
 
     // List available tools
     let tools = layer.list_tools().await?;
@@ -67,8 +68,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Call a tool
     let request = CallToolRequestParam {
-        name: "example_tool".to_string(),
-        arguments: serde_json::json!({"input": "test"}),
+        name: Cow::Borrowed("example_tool"),
+        arguments: serde_json::json!({"input": "test"}).as_object().cloned(),
     };
     let result = layer.call_tool(request).await?;
     println!("Tool result: {:?}", result);
@@ -79,13 +80,16 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-
 ## Examples
 
 Practical examples are available in the `examples/` directory:
 
-- **Simple Client** (`examples/simple/`) - Basic GPMCP Layer usage demonstrating server connection, tool discovery, and communication patterns
-- **Counter Server** (`examples/servers/counter/`) - Sample MCP server implementing stateful counter operations with both stdio and SSE transport support
+- **Simple StdIO Client** (`examples/simple_stdio/`) - Basic GPMCP Layer usage demonstrating server connection, tool
+  discovery, and communication patterns using StdIO transport.
+- **Simple SSE Client** (`examples/simple_sse/`) - Basic GPMCP Layer usage demonstrating server connection, tool
+  discovery, and communication patterns using SSE transport.
+- **Counter Server** (`examples/test-mcp-server/`) - Sample MCP server implementing stateful counter operations with
+  both StdIO and SSE transport support
 
 See the [examples README](examples/README.md) for detailed usage instructions.
 
@@ -93,6 +97,8 @@ See the [examples README](examples/README.md) for detailed usage instructions.
 
 ### Core Methods
 
+- `new(config)` - Create a new GpmcpLayer instance with the given configuration
+- `connect()` - Start and connect to the MCP server
 - `list_tools()` - Get available tools from the MCP server
 - `call_tool(request)` - Execute a tool with parameters
 - `list_prompts()` - Get available prompts

@@ -108,11 +108,13 @@ impl ProcessLifecycle for WindowsProcessManager {
             cmd.env(key, value);
         }
 
-        // On Windows, we don't have process groups like Unix, but we can create
-        // a new console for better process management
+        // On Windows, we create processes without a console window for background execution
+        // This avoids the annoying console popup while maintaining process management capabilities
         #[cfg(windows)]
         {
-            cmd.creation_flags(0x00000010); // CREATE_NEW_CONSOLE
+            // CREATE_NO_WINDOW (0x08000000) - Creates a process without a console window
+            // This is better than CREATE_NEW_CONSOLE for background processes
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
         let child = cmd
