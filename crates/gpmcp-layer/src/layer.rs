@@ -58,7 +58,6 @@ impl GpmcpLayer<Initialized> {
         Fut: Future<Output = Result<T, GpmcpError>> + Send,
         T: Send,
     {
-        // Create the retry strategy
         let is_retry = AtomicBool::new(false);
 
         // Create the operation closure that handles connection management
