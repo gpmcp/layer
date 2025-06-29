@@ -16,5 +16,6 @@ The simple example:
 
 1. **Configures a connection** to the counter server using `RunnerConfig`
 2. **Creates a GpmcpLayer instance** with the specified configuration
+3. **Async connect() function** establishes the connection to the server
 3. **Lists available tools** from the connected server
 4. **Prints tool names** to demonstrate successful communication
