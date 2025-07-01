@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
+use crate::catch::Catch;
 
 pub struct Initialized;
 
@@ -119,7 +120,8 @@ impl GpmcpRunnerInner<Initialized> {
             coordinator
                 .list_prompts()
                 .await
-                .map_err(|e| GpmcpError::mcp_operation_failed(format!("list_prompts failed: {e}")))
+                .map_err(GpmcpError::McpOperationFailed)
+                .catch()
         } else {
             Err(GpmcpError::ServiceNotFound)
         }

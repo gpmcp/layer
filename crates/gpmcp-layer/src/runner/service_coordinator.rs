@@ -55,19 +55,17 @@ impl ServiceCoordinator {
     }
 
     /// List available tools from the MCP server
-    pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult> {
+    pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult, rmcp::ServiceError> {
         self.service
             .list_tools(Default::default())
             .await
-            .context("Failed to list tools")
     }
 
     /// List available prompts from the MCP server
-    pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult> {
+    pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult, rmcp::ServiceError> {
         self.service
             .list_prompts(Default::default())
             .await
-            .context("Failed to list prompts")
     }
 
     /// List available resources from the MCP server
