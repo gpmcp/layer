@@ -3,7 +3,9 @@ use crate::runner::transport_manager::TransportManager;
 use anyhow::{Context, Result};
 use rmcp::model::{ClientInfo, InitializeRequestParam};
 use rmcp::{ServiceExt, service::RunningService};
+use tokio::task::JoinError;
 use tracing::info;
+use crate::error::GpmcpError;
 
 /// ServiceCoordinator manages the MCP service connection and provides
 /// a unified interface for all MCP operations
@@ -16,7 +18,7 @@ impl ServiceCoordinator {
     pub async fn new(
         transport_manager: TransportManager,
         runner_config: &RunnerConfig,
-    ) -> Result<Self> {
+    ) -> Result<Self, GpmcpError> {
         info!("Creating service coordinator");
 
         // Create client info
@@ -27,14 +29,14 @@ impl ServiceCoordinator {
 
         // Create the service using the appropriate transport
         let service = match transport {
+            // TODO: Add varient in GpmcpError
             super::transport_manager::TransportVariant::Stdio(stdio_transport) => client_info
                 .serve(stdio_transport)
-                .await
-                .context("Failed to create stdio service")?,
+                .await?;
+            // TODO: Add varient in GpmcpError
             super::transport_manager::TransportVariant::Sse(sse_transport) => client_info
                 .serve(sse_transport)
-                .await
-                .context("Failed to create SSE service")?,
+                .await?,
         };
 
         info!("Service coordinator created successfully");
@@ -69,44 +71,40 @@ impl ServiceCoordinator {
     }
 
     /// List available resources from the MCP server
-    pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult> {
+    pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult, rmcp::ServiceError> {
         self.service
             .list_resources(Default::default())
             .await
-            .context("Failed to list resources")
     }
 
     /// Call a tool on the MCP server
     pub async fn call_tool(
         &self,
         request: rmcp::model::CallToolRequestParam,
-    ) -> Result<rmcp::model::CallToolResult> {
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ServiceError> {
         self.service
             .call_tool(request)
             .await
-            .context("Failed to call tool")
     }
 
     /// Get a prompt from the MCP server
     pub async fn get_prompt(
         &self,
         request: rmcp::model::GetPromptRequestParam,
-    ) -> Result<rmcp::model::GetPromptResult> {
+    ) -> Result<rmcp::model::GetPromptResult, rmcp::ServiceError> {
         self.service
             .get_prompt(request)
             .await
-            .context("Failed to get prompt")
     }
 
     /// Read a resource from the MCP server
     pub async fn read_resource(
         &self,
         request: rmcp::model::ReadResourceRequestParam,
-    ) -> Result<rmcp::model::ReadResourceResult> {
+    ) -> Result<rmcp::model::ReadResourceResult, rmcp::ServiceError> {
         self.service
             .read_resource(request)
             .await
-            .context("Failed to read resource")
     }
 
     /// Get server information
@@ -115,13 +113,10 @@ impl ServiceCoordinator {
     }
 
     /// Cancel the service
-    pub async fn cancel(self) -> Result<()> {
-        info!("Cancelling service coordinator");
+    pub async fn cancel(self) -> Result<(), JoinError> {
         self.service
             .cancel()
-            .await
-            .context("Failed to cancel service")?;
-        info!("Service coordinator cancelled successfully");
+            .await?;
         Ok(())
     }
 }

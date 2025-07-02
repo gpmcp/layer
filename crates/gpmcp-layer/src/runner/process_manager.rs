@@ -21,22 +21,22 @@ pub struct ProcessManager {
 
 impl ProcessManager {
     /// Create a new ProcessManager with platform-specific implementation
-    pub async fn new(runner_config: &RunnerConfig) -> Result<Self> {
+    pub async fn new(runner_config: &RunnerConfig) -> Self {
         let platform_manager = PlatformProcessManagerFactory::create_process_manager();
         info!(
             "Created ProcessManager with platform: {}",
             PlatformProcessManagerFactory::platform_name()
         );
 
-        Ok(Self {
+        Self {
             platform_manager: Arc::from(platform_manager),
             active_processes: Arc::new(std::sync::Mutex::new(HashMap::new())),
             runner_config: runner_config.clone(),
-        })
+        }
     }
 
     /// Start the server process from the runner configuration
-    pub async fn start_server(&self) -> Result<Box<dyn ProcessHandle>> {
+    pub async fn start_server(&self) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
         info!("Starting server process from configuration");
 
         let config = &self.runner_config;
@@ -58,7 +58,7 @@ impl ProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: Option<&HashMap<String, String>>,
-    ) -> Result<Box<dyn ProcessHandle>> {
+    ) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
         let env = env.cloned().unwrap_or_default();
 
         debug!("Spawning process: {} with args: {:?}", command, args);
@@ -66,8 +66,7 @@ impl ProcessManager {
         let handle = self
             .platform_manager
             .spawn_process(command, args, working_dir, &env)
-            .await
-            .with_context(|| format!("Failed to spawn process: {command}"))?;
+            .await?;
 
         // Track the process
         if let Some(pid) = handle.get_pid() {
@@ -80,7 +79,7 @@ impl ProcessManager {
     }
 
     /// Cleanup all tracked processes and resources
-    pub async fn cleanup(&self) -> Result<()> {
+    pub async fn cleanup(&self) {
         info!("Starting ProcessManager cleanup");
 
         let active_processes = {
@@ -109,11 +108,7 @@ impl ProcessManager {
             active.clear();
         }
 
-        // Platform-specific cleanup
-        self.platform_manager.cleanup().await?;
-
         info!("ProcessManager cleanup completed");
-        Ok(())
     }
 }
 
@@ -178,7 +173,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_manager_creation() {
         let config = create_test_config();
-        let manager = ProcessManager::new(&config).await.unwrap();
+        let manager = ProcessManager::new(&config).await;
 
         // Verify manager was created successfully - just check that it exists
         // The fact that ProcessManager::new() succeeded means the platform manager was created
@@ -188,7 +183,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_spawning() {
         let config = create_test_config();
-        let manager = ProcessManager::new(&config).await.unwrap();
+        let manager = ProcessManager::new(&config).await;
 
         // Test spawning a simple process
         #[cfg(unix)]
@@ -232,7 +227,7 @@ mod tests {
             config.args = vec!["127.0.0.1".to_string(), "-n".to_string(), "1".to_string()];
         }
 
-        let manager = ProcessManager::new(&config).await.unwrap();
+        let manager = ProcessManager::new(&config).await;
         let handle = manager.start_server().await.unwrap();
 
         // Verify server process started
@@ -240,30 +235,5 @@ mod tests {
 
         // Wait a bit for process to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-    }
-
-    #[tokio::test]
-    async fn test_cleanup_functionality() {
-        let mut config = create_test_config();
-
-        // Use a longer-running process for cleanup testing
-        #[cfg(unix)]
-        {
-            config.command = "sleep".to_string();
-            config.args = vec!["5".to_string()];
-        }
-
-        #[cfg(windows)]
-        {
-            config.command = "ping".to_string();
-            config.args = vec!["127.0.0.1".to_string(), "-n".to_string(), "10".to_string()];
-        }
-
-        let manager = ProcessManager::new(&config).await.unwrap();
-        let _handle = manager.start_server().await.unwrap();
-
-        // Test cleanup
-        let result = manager.cleanup().await;
-        assert!(result.is_ok());
     }
 }

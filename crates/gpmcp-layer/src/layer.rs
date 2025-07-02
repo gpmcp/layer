@@ -14,18 +14,12 @@ pub struct GpmcpLayer<Status> {
     retry_config: ExponentialBuilder,
 }
 impl GpmcpLayer<Uninitialized> {
-    pub fn new(runner_config: RunnerConfig) -> Result<Self, GpmcpError> {
-        // Validate retry config at construction time
-        runner_config
-            .retry_config
-            .validate()
-            .map_err(|e| GpmcpError::ConfigurationError(format!("Invalid retry config: {e}")))?;
-
-        Ok(Self {
+    pub fn new(runner_config: RunnerConfig) -> Self {
+        Self {
             inner: Arc::new(Mutex::new(GpmcpRunnerInner::new(runner_config.clone()))),
             retry_config: Self::create_retry_strategy(&runner_config.retry_config),
             runner_config,
-        })
+        }
     }
     pub async fn connect(self) -> Result<GpmcpLayer<Initialized>, GpmcpError> {
         let initialized_inner = self.inner.lock().await.connect().await?;

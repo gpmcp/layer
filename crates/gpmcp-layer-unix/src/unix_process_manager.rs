@@ -96,7 +96,7 @@ mod unix_impl {
             args: &[String],
             working_dir: Option<&str>,
             env: &HashMap<String, String>,
-        ) -> Result<Box<dyn ProcessHandle>> {
+        ) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
             let mut cmd = Command::new(command);
             cmd.args(args);
 
@@ -113,9 +113,7 @@ mod unix_impl {
             // Create new process group for better process tree management
             cmd.process_group(0);
 
-            let child = cmd
-                .spawn()
-                .with_context(|| format!("Failed to spawn process: {command}"))?;
+            let child = cmd.spawn()?;
 
             // Log successful process creation
             if let Some(pid) = child.id() {
@@ -393,11 +391,6 @@ mod unix_impl {
             Self {
                 system: std::sync::Mutex::new(System::new_all()),
             }
-        }
-
-        async fn cleanup(&self) -> Result<()> {
-            info!("Unix process manager cleanup completed");
-            Ok(())
         }
     }
 }

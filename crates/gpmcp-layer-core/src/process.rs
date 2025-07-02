@@ -56,7 +56,7 @@ pub trait ProcessLifecycle: Send + Sync {
         args: &[String],
         working_dir: Option<&str>,
         env: &std::collections::HashMap<String, String>,
-    ) -> Result<Box<dyn ProcessHandle>>;
+    ) -> Result<Box<dyn ProcessHandle>, std::io::Error>;
 
     /// Check if a process is still running and healthy
     async fn is_process_healthy(&self, handle: &dyn ProcessHandle) -> bool;
@@ -163,6 +163,7 @@ pub trait ProcessHandle: Send + Sync {
     async fn kill(&mut self) -> Result<()>;
 }
 
+// FIXME: Drop me.
 /// High-level process manager trait that combines lifecycle and termination
 #[async_trait]
 pub trait ProcessManager: ProcessLifecycle + ProcessTermination {
@@ -170,9 +171,6 @@ pub trait ProcessManager: ProcessLifecycle + ProcessTermination {
     fn new() -> Self
     where
         Self: Sized;
-
-    /// Cleanup any resources held by the process manager
-    async fn cleanup(&self) -> Result<()>;
 }
 
 /// Factory trait for creating platform-specific process managers

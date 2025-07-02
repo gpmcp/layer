@@ -94,7 +94,7 @@ impl ProcessLifecycle for WindowsProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: &HashMap<String, String>,
-    ) -> Result<Box<dyn ProcessHandle>> {
+    ) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
         let mut cmd = Command::new(command);
         cmd.args(args);
 
@@ -117,9 +117,7 @@ impl ProcessLifecycle for WindowsProcessManager {
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
-        let child = cmd
-            .spawn()
-            .with_context(|| format!("Failed to spawn process: {command}"))?;
+        let child = cmd.spawn()?;
 
         // Log successful process creation
         if let Some(pid) = child.id() {
@@ -408,10 +406,5 @@ impl ProcessManager for WindowsProcessManager {
         Self {
             system: std::sync::Mutex::new(System::new_all()),
         }
-    }
-
-    async fn cleanup(&self) -> Result<()> {
-        info!("Windows process manager cleanup completed");
-        Ok(())
     }
 }

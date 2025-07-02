@@ -1,8 +1,9 @@
+mod catch;
+mod error;
 mod layer;
 mod runner;
-mod catch;
 
-// Re-export core types
+pub(crate) use error::*;
 pub use gpmcp_layer_core::*;
 pub use layer::*;
 pub use rmcp::model::*;

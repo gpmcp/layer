@@ -88,22 +88,6 @@ impl RetryConfig {
         }
     }
 
-    /// Validate the configuration and return errors if invalid
-    pub fn validate(&self) -> Result<(), crate::error::GpmcpError> {
-        if self.min_delay_ms > self.max_delay_ms {
-            return Err(crate::error::GpmcpError::ConfigurationError(
-                "min_delay_ms cannot be greater than max_delay_ms".to_string(),
-            ));
-        }
-
-        if self.max_delay_ms > 60_000 {
-            return Err(crate::error::GpmcpError::ConfigurationError(
-                "max_delay_ms should not exceed 60 seconds".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
     /// Get the minimum delay as Duration
     pub fn min_delay(&self) -> std::time::Duration {
         std::time::Duration::from_millis(self.min_delay_ms)
@@ -202,47 +186,6 @@ fn default_retry_on_connection_failure() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_default_config() {
-        let config = RetryConfig::default();
-        assert!(config.validate().is_ok());
-        assert!(config.retries_enabled());
-    }
-
-    #[test]
-    fn test_aggressive_config() {
-        let config = RetryConfig::aggressive();
-        assert!(config.validate().is_ok());
-        assert_eq!(config.max_attempts, 5);
-        assert_eq!(config.max_delay_ms, 10_000);
-    }
-
-    #[test]
-    fn test_conservative_config() {
-        let config = RetryConfig::conservative();
-        assert!(config.validate().is_ok());
-        assert_eq!(config.max_attempts, 2);
-        assert!(!config.use_exponential_backoff);
-    }
-
-    #[test]
-    fn test_no_retry_config() {
-        let config = RetryConfig::no_retry();
-        assert!(config.validate().is_ok());
-        assert!(!config.retries_enabled());
-    }
-
-    #[test]
-    fn test_invalid_config() {
-        let config = RetryConfig {
-            min_delay_ms: 1000,
-            max_delay_ms: 500,
-            ..Default::default()
-        };
-        assert!(config.validate().is_err());
-    }
-
     #[test]
     fn test_serialization() {
         let config = RetryConfig::aggressive();

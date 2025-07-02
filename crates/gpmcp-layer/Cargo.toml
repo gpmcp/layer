@@ -22,6 +22,8 @@ rmcp = { git = "https://github.com/gpmcp/rust-sdk", rev = "b9d7d61ebd6e8385cbc4a
 tokio-util = "0.7.15"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 backon = "1.2"
+thiserror = "2.0.12"
+derive_more = { version = "2.0.1", features = ["from"] }
 
 # Platform-specific dependencies
 [target.'cfg(unix)'.dependencies]

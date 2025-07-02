@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use rmcp::transport::{SseClientTransport, TokioChildProcess};
 use tokio::process::Command;
 use tracing::{info, warn};
+use crate::error::GpmcpError;
 
 /// TransportManager handles the creation and management of different transport types
 pub struct TransportManager {
@@ -16,7 +17,7 @@ pub enum TransportVariant {
 
 impl TransportManager {
     /// Creates a new TransportManager
-    pub async fn new(runner_config: &RunnerConfig) -> Result<Self> {
+    pub async fn new(runner_config: &RunnerConfig) -> Result<Self, GpmcpError> {
         let transport = match &runner_config.transport {
             Transport::Stdio => {
                 info!("Creating stdio transport");
@@ -32,7 +33,9 @@ impl TransportManager {
     }
 
     /// Creates a stdio transport using TokioChildProcess
-    async fn create_stdio_transport(runner_config: RunnerConfig) -> Result<TransportVariant> {
+    async fn create_stdio_transport(
+        runner_config: RunnerConfig,
+    ) -> Result<TransportVariant, GpmcpError> {
         // Create the command
         let mut cmd = Command::new(&runner_config.command);
         cmd.args(&runner_config.args);
@@ -53,8 +56,7 @@ impl TransportManager {
             runner_config.command, runner_config.args
         );
 
-        let transport =
-            TokioChildProcess::new(cmd).context("Failed to create TokioChildProcess")?;
+        let transport = TokioChildProcess::new(cmd)?;
 
         // Note: TokioChildProcess doesn't expose PID directly
         warn!(
@@ -66,7 +68,7 @@ impl TransportManager {
     }
 
     /// Creates an SSE transport with server readiness polling
-    async fn create_sse_transport(url: impl ToString) -> Result<TransportVariant> {
+    async fn create_sse_transport(url: impl ToString) -> Result<TransportVariant, GpmcpError> {
         let url_string = url.to_string();
 
         // Poll the server to check if it's ready using list_tools request
@@ -74,15 +76,14 @@ impl TransportManager {
         Self::poll_server_readiness(&url_string, 10, 1000).await?;
 
         // Create SSE transport
-        let transport = SseClientTransport::start(url_string)
-            .await
-            .context("Failed to create SSE transport")?;
+        // TODO: Add varient in GpmcpError and use that.
+        let transport = SseClientTransport::start(url_string).await?;
 
         Ok(TransportVariant::Sse(transport))
     }
 
     /// Poll the server readiness by attempting to connect and call list_tools
-    async fn poll_server_readiness(url: &str, max_attempts: u32, interval_ms: u64) -> Result<()> {
+    async fn poll_server_readiness(url: &str, max_attempts: u32, interval_ms: u64) -> Result<(), GpmcpError> {
         info!(
             "Polling server readiness at {} (max {} attempts, {}ms interval)",
             url, max_attempts, interval_ms
@@ -97,6 +98,7 @@ impl TransportManager {
                 }
                 Err(e) => {
                     if attempt == max_attempts {
+                        // TODO: Add varient in GpmcpError and use that.
                         return Err(anyhow::anyhow!(
                             "Server not ready after {} attempts. Last error: {}",
                             max_attempts,
@@ -109,6 +111,7 @@ impl TransportManager {
             }
         }
 
+        // TODO: Add varient in GpmcpError and use that.
         Err(anyhow::anyhow!("Server polling failed unexpectedly"))
     }
 
