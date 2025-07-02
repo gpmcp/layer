@@ -6,7 +6,7 @@ pub trait Catch<T>: Sync + Send + Sized {
 
 impl<T: Sync + Send, E: Into<GpmcpError> + Sync + Send> Catch<T> for Result<T, E> {
     fn catch(self) -> Result<T, GpmcpError> {
-        let r = anyhow::Result::from(self.into());
+        let r = anyhow::Result::from(self);
 
         match r {
             Ok(r) => Ok(r),
