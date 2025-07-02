@@ -76,7 +76,7 @@ impl GpmcpRunnerInner<Initialized> {
     /// List available tools from the MCP server
     pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            Ok(coordinator.list_tools().await?)
+            coordinator.list_tools().await.catch()
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -88,7 +88,7 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::CallToolRequestParam,
     ) -> Result<rmcp::model::CallToolResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            Ok(coordinator.call_tool(request).await?)
+            coordinator.call_tool(request).await.catch()
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -97,7 +97,7 @@ impl GpmcpRunnerInner<Initialized> {
     /// List available prompts from the MCP server
     pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            Ok(coordinator.list_prompts().await?)
+            coordinator.list_prompts().await.catch()
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -106,7 +106,7 @@ impl GpmcpRunnerInner<Initialized> {
     /// List available resources from the MCP server
     pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            Ok(coordinator.list_resources().await?)
+            coordinator.list_resources().await.catch()
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -118,7 +118,7 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::GetPromptRequestParam,
     ) -> Result<rmcp::model::GetPromptResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            Ok(coordinator.get_prompt(request).await?)
+            coordinator.get_prompt(request).await.catch()
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -130,7 +130,7 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::ReadResourceRequestParam,
     ) -> Result<rmcp::model::ReadResourceResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            Ok(coordinator.read_resource(request).await?)
+            coordinator.read_resource(request).await.catch()
         } else {
             Err(GpmcpError::ServiceNotFound)
         }
@@ -166,7 +166,7 @@ impl GpmcpRunnerInner<Initialized> {
         // Then cleanup process if exists
         if let Some(manager) = process_manager.write().await.take() {
             // TODO: Add varient in GpmcpError
-            manager.cleanup().await?;
+            manager.cleanup().await;
         }
         info!("GpmcpRunner cancelled successfully");
         Ok(())

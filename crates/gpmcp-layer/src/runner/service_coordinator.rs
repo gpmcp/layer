@@ -1,11 +1,11 @@
 use crate::RunnerConfig;
+use crate::error::GpmcpError;
 use crate::runner::transport_manager::TransportManager;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rmcp::model::{ClientInfo, InitializeRequestParam};
 use rmcp::{ServiceExt, service::RunningService};
 use tokio::task::JoinError;
 use tracing::info;
-use crate::error::GpmcpError;
 
 /// ServiceCoordinator manages the MCP service connection and provides
 /// a unified interface for all MCP operations
@@ -29,14 +29,12 @@ impl ServiceCoordinator {
 
         // Create the service using the appropriate transport
         let service = match transport {
-            // TODO: Add varient in GpmcpError
-            super::transport_manager::TransportVariant::Stdio(stdio_transport) => client_info
-                .serve(stdio_transport)
-                .await?;
-            // TODO: Add varient in GpmcpError
-            super::transport_manager::TransportVariant::Sse(sse_transport) => client_info
-                .serve(sse_transport)
-                .await?,
+            super::transport_manager::TransportVariant::Stdio(stdio_transport) => {
+                client_info.serve(stdio_transport).await?
+            }
+            super::transport_manager::TransportVariant::Sse(sse_transport) => {
+                client_info.serve(sse_transport).await?
+            }
         };
 
         info!("Service coordinator created successfully");
@@ -58,23 +56,19 @@ impl ServiceCoordinator {
 
     /// List available tools from the MCP server
     pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult, rmcp::ServiceError> {
-        self.service
-            .list_tools(Default::default())
-            .await
+        self.service.list_tools(Default::default()).await
     }
 
     /// List available prompts from the MCP server
     pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult, rmcp::ServiceError> {
-        self.service
-            .list_prompts(Default::default())
-            .await
+        self.service.list_prompts(Default::default()).await
     }
 
     /// List available resources from the MCP server
-    pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult, rmcp::ServiceError> {
-        self.service
-            .list_resources(Default::default())
-            .await
+    pub async fn list_resources(
+        &self,
+    ) -> Result<rmcp::model::ListResourcesResult, rmcp::ServiceError> {
+        self.service.list_resources(Default::default()).await
     }
 
     /// Call a tool on the MCP server
@@ -82,9 +76,7 @@ impl ServiceCoordinator {
         &self,
         request: rmcp::model::CallToolRequestParam,
     ) -> Result<rmcp::model::CallToolResult, rmcp::ServiceError> {
-        self.service
-            .call_tool(request)
-            .await
+        self.service.call_tool(request).await
     }
 
     /// Get a prompt from the MCP server
@@ -92,9 +84,7 @@ impl ServiceCoordinator {
         &self,
         request: rmcp::model::GetPromptRequestParam,
     ) -> Result<rmcp::model::GetPromptResult, rmcp::ServiceError> {
-        self.service
-            .get_prompt(request)
-            .await
+        self.service.get_prompt(request).await
     }
 
     /// Read a resource from the MCP server
@@ -102,9 +92,7 @@ impl ServiceCoordinator {
         &self,
         request: rmcp::model::ReadResourceRequestParam,
     ) -> Result<rmcp::model::ReadResourceResult, rmcp::ServiceError> {
-        self.service
-            .read_resource(request)
-            .await
+        self.service.read_resource(request).await
     }
 
     /// Get server information
@@ -114,9 +102,7 @@ impl ServiceCoordinator {
 
     /// Cancel the service
     pub async fn cancel(self) -> Result<(), JoinError> {
-        self.service
-            .cancel()
-            .await?;
+        self.service.cancel().await?;
         Ok(())
     }
 }

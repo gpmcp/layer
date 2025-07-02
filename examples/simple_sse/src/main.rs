@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
         .build()?;
 
     // Create a new GpmcpLayer instance with the config.
-    let layer = GpmcpLayer::new(config)?.connect().await?;
+    let layer = GpmcpLayer::new(config).connect().await?;
 
     // List available tools.
     let tools = layer.list_tools().await?;
