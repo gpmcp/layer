@@ -7,7 +7,7 @@ use crate::runner::transport_manager::TransportManager;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info, warn};
 
 pub struct Initialized;
 
@@ -33,10 +33,6 @@ impl GpmcpRunnerInner<Uninitialized> {
         }
     }
     pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> {
-        info!(
-            "Creating GpmcpRunner for server: {}",
-            self.runner_config.name
-        );
 
         // Determine transport type and create appropriate managers
 
@@ -45,7 +41,6 @@ impl GpmcpRunnerInner<Uninitialized> {
 
         // For SSE transport, start the server process first
         if matches!(self.runner_config.transport, crate::Transport::Sse { .. }) {
-            info!("Starting server process for SSE transport");
             let _handle = process_manager.start_server().await?;
         }
 
@@ -76,8 +71,10 @@ impl GpmcpRunnerInner<Initialized> {
     /// List available tools from the MCP server
     pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
+            info!("Listing available tools from MCP server");
             coordinator.list_tools().await.catch()
         } else {
+            error!("Service coordinator not available for list_tools operation");
             Err(GpmcpError::service_not_found())
         }
     }
@@ -88,8 +85,10 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::CallToolRequestParam,
     ) -> Result<rmcp::model::CallToolResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
+            info!("Calling tool: {}", request.name);
             coordinator.call_tool(request).await.catch()
         } else {
+            error!("Service coordinator not available for call_tool operation");
             Err(GpmcpError::service_not_found())
         }
     }
@@ -97,8 +96,10 @@ impl GpmcpRunnerInner<Initialized> {
     /// List available prompts from the MCP server
     pub async fn list_prompts(&self) -> Result<rmcp::model::ListPromptsResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
+            info!("Listing available prompts from MCP server");
             coordinator.list_prompts().await.catch()
         } else {
+            error!("Service coordinator not available for list_prompts operation");
             Err(GpmcpError::service_not_found())
         }
     }
@@ -106,8 +107,10 @@ impl GpmcpRunnerInner<Initialized> {
     /// List available resources from the MCP server
     pub async fn list_resources(&self) -> Result<rmcp::model::ListResourcesResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
+            info!("Listing available resources from MCP server");
             coordinator.list_resources().await.catch()
         } else {
+            error!("Service coordinator not available for list_resources operation");
             Err(GpmcpError::service_not_found())
         }
     }
@@ -118,8 +121,10 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::GetPromptRequestParam,
     ) -> Result<rmcp::model::GetPromptResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
+            info!("Getting prompt: {}", request.name);
             coordinator.get_prompt(request).await.catch()
         } else {
+            error!("Service coordinator not available for get_prompt operation");
             Err(GpmcpError::service_not_found())
         }
     }
@@ -130,8 +135,10 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::ReadResourceRequestParam,
     ) -> Result<rmcp::model::ReadResourceResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
+            info!("Reading resource: {}", request.uri);
             coordinator.read_resource(request).await.catch()
         } else {
+            error!("Service coordinator not available for read_resource operation");
             Err(GpmcpError::service_not_found())
         }
     }
@@ -139,8 +146,10 @@ impl GpmcpRunnerInner<Initialized> {
     /// Get server information
     pub async fn peer_info(&self) -> Option<rmcp::model::ServerInfo> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
+            info!("Retrieving peer server information");
             coordinator.peer_info().cloned()
         } else {
+            warn!("Service coordinator not available for peer_info operation");
             None
         }
     }

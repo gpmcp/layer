@@ -49,8 +49,14 @@ impl ProcessHandle for WindowsProcessHandle {
                 true,
                 sysinfo::ProcessRefreshKind::everything(),
             );
-            system.processes().iter().any(|(p, _)| p.as_u32() == _pid.0)
+            if system.processes().iter().any(|(p, _)| p.as_u32() == _pid.0) {
+                info!("Windows process {} is no longer running", _pid.0);
+                false
+            } else {
+                true
+            }
         } else {
+            warn!("Windows process handle has no PID - process may have exited");
             false
         }
     }
@@ -403,6 +409,7 @@ impl WindowsProcessManager {
 #[async_trait]
 impl ProcessManager for WindowsProcessManager {
     fn new() -> Self {
+        info!("Initializing Windows process manager with system monitoring");
         Self {
             system: std::sync::Mutex::new(System::new_all()),
         }

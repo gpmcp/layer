@@ -54,20 +54,9 @@ impl TransportManager {
             cmd.env(key, value);
         }
 
-        // Try to get PID information before creating transport
-        info!(
-            "Creating STDIO transport for command: {} with args: {:?}",
-            runner_config.command, runner_config.args
-        );
-
         let transport = TokioChildProcess::new(cmd)?;
 
-        // Note: TokioChildProcess doesn't expose PID directly
-        warn!(
-            "STDIO transport created for command: {} - PID not accessible through TokioChildProcess interface",
-            runner_config.command
-        );
-
+        info!("Stdio transport created successfully");
         Ok(TransportVariant::Stdio(transport))
     }
 
@@ -83,6 +72,7 @@ impl TransportManager {
         // TODO: Add varient in GpmcpError and use that.
         let transport = SseClientTransport::start(url_string).await?;
 
+        info!("SSE transport created successfully."); 
         Ok(TransportVariant::Sse(transport))
     }
 
@@ -131,7 +121,8 @@ impl TransportManager {
 
         // Cancel the test service
         service.cancel().await?;
-
+        
+        info!("Server is ready and responding to list_tools request");
         Ok(())
     }
 

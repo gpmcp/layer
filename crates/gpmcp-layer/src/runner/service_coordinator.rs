@@ -5,7 +5,7 @@ use anyhow::Result;
 use rmcp::model::{ClientInfo, InitializeRequestParam};
 use rmcp::{ServiceExt, service::RunningService};
 use tokio::task::JoinError;
-use tracing::info;
+use tracing::{info, error};
 
 /// ServiceCoordinator manages the MCP service connection and provides
 /// a unified interface for all MCP operations
@@ -102,7 +102,16 @@ impl ServiceCoordinator {
 
     /// Cancel the service
     pub async fn cancel(self) -> Result<(), JoinError> {
-        self.service.cancel().await?;
-        Ok(())
+        info!("Cancelling service coordinator");
+        match self.service.cancel().await {
+            Ok(_) => {
+                info!("Service coordinator cancelled successfully");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to cancel service coordinator: {}", e);
+                Err(e)
+            }
+        }
     }
 }

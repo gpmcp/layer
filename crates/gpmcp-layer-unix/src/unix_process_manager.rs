@@ -51,8 +51,16 @@ mod unix_impl {
             if let Some(pid) = self.get_pid() {
                 let nix_pid = NixPid::from_raw(pid.0 as i32);
                 // Send signal 0 to check if process exists
-                signal::kill(nix_pid, None).is_ok()
+
+                if !signal::kill(nix_pid, None).is_ok() {
+                    info!("Unix process {} is no longer running", pid.0);
+                    false
+                } else {
+                    info!("Unix process {} is still running", pid.0);
+                    true
+                }
             } else {
+                warn!("Unix process handle has no PID - process may have exited");
                 false
             }
         }
@@ -388,6 +396,7 @@ mod unix_impl {
     #[async_trait]
     impl ProcessManager for UnixProcessManager {
         fn new() -> Self {
+            info!("Initializing Unix process manager with system monitoring");
             Self {
                 system: std::sync::Mutex::new(System::new_all()),
             }

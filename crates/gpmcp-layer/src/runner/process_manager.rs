@@ -37,7 +37,6 @@ impl ProcessManager {
 
     /// Start the server process from the runner configuration
     pub async fn start_server(&self) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
-        info!("Starting server process from configuration");
 
         let config = &self.runner_config;
         let working_dir = config.working_directory.as_ref().and_then(|p| p.to_str());

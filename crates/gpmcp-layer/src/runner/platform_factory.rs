@@ -1,4 +1,5 @@
 use gpmcp_layer_core::{ProcessManager, ProcessManagerFactory};
+use tracing::info;
 
 /// Platform-agnostic factory that selects the appropriate implementation at compile time
 pub struct PlatformProcessManagerFactory;
@@ -7,11 +8,13 @@ impl ProcessManagerFactory for PlatformProcessManagerFactory {
     fn create_process_manager() -> Box<dyn ProcessManager> {
         #[cfg(unix)]
         {
+            info!("Creating Unix process manager");
             gpmcp_layer_unix::UnixProcessManagerFactory::create_process_manager()
         }
 
         #[cfg(windows)]
         {
+            info!("Creating Windows process manager");
             gpmcp_layer_windows::WindowsProcessManagerFactory::create_process_manager()
         }
 

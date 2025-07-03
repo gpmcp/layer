@@ -6,6 +6,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::sync::Mutex;
+use tracing::{info, warn, error};
 
 #[derive(Clone)]
 pub struct GpmcpLayer<Status> {
@@ -57,6 +58,7 @@ impl GpmcpLayer<Initialized> {
         // Create the operation closure that handles connection management
         let operation_with_connection = || async {
             if is_retry.load(std::sync::atomic::Ordering::Relaxed) {
+                warn!("Reconnecting due to retry attempt");
                 let new = GpmcpRunnerInner::new(self.runner_config.clone());
                 *self.inner.lock().await = new.connect().await?;
             }
