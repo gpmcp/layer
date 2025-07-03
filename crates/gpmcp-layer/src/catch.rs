@@ -1,5 +1,5 @@
-use crate::error::GpmcpErrorInner;
 use crate::GpmcpError;
+use crate::error::GpmcpErrorInner;
 
 pub trait Catch<T>: Sync + Send + Sized {
     fn catch(self) -> Result<T, GpmcpError>;
