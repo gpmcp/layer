@@ -19,22 +19,22 @@ impl<T: Sync + Send, E: Into<GpmcpError> + Sync + Send> Catch<T> for Result<T, E
                         error!("Service not found error caught");
                     }
                     GpmcpErrorInner::McpOperationFailed(_) => {
-                        error!("MCP operation failed error caught: {}", e);
+                        error!(error=%e, "MCP operation failed error caught");
                     }
                     GpmcpErrorInner::JoinError(_) => {
-                        error!("Join error caught: {}", e);
+                        error!(error=%e, "Join error caught");
                     }
                     GpmcpErrorInner::IoError(_) => {
-                        error!("IO error caught: {}", e);
+                        error!(error=%e, "IO error caught");
                     }
                     GpmcpErrorInner::StdioInitError(_) => {
-                        error!("STDIO initialization error caught: {}", e);
+                        error!(error=%e, "STDIO initialization error caught");
                     }
                     GpmcpErrorInner::SseError(_) => {
-                        error!("SSE error caught: {}", e);
+                        error!(error=%e, "SSE error caught");
                     }
                     GpmcpErrorInner::SseInitError(_) => {
-                        error!("SSE initialization error caught: {}", e);
+                        error!(error=%e, "SSE initialization error caught");
                     }
                 }
                 Err(e)
