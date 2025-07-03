@@ -72,7 +72,7 @@ impl TransportManager {
         // TODO: Add varient in GpmcpError and use that.
         let transport = SseClientTransport::start(url_string).await?;
 
-        info!("SSE transport created successfully."); 
+        info!("SSE transport created successfully"); 
         Ok(TransportVariant::Sse(transport))
     }
 
