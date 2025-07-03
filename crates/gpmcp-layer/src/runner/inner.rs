@@ -78,7 +78,7 @@ impl GpmcpRunnerInner<Initialized> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
             coordinator.list_tools().await.catch()
         } else {
-            Err(GpmcpError::ServiceNotFound)
+            Err(GpmcpError::service_not_found())
         }
     }
 
@@ -90,7 +90,7 @@ impl GpmcpRunnerInner<Initialized> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
             coordinator.call_tool(request).await.catch()
         } else {
-            Err(GpmcpError::ServiceNotFound)
+            Err(GpmcpError::service_not_found())
         }
     }
 
@@ -99,7 +99,7 @@ impl GpmcpRunnerInner<Initialized> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
             coordinator.list_prompts().await.catch()
         } else {
-            Err(GpmcpError::ServiceNotFound)
+            Err(GpmcpError::service_not_found())
         }
     }
 
@@ -108,7 +108,7 @@ impl GpmcpRunnerInner<Initialized> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
             coordinator.list_resources().await.catch()
         } else {
-            Err(GpmcpError::ServiceNotFound)
+            Err(GpmcpError::service_not_found())
         }
     }
 
@@ -120,7 +120,7 @@ impl GpmcpRunnerInner<Initialized> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
             coordinator.get_prompt(request).await.catch()
         } else {
-            Err(GpmcpError::ServiceNotFound)
+            Err(GpmcpError::service_not_found())
         }
     }
 
@@ -132,7 +132,7 @@ impl GpmcpRunnerInner<Initialized> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
             coordinator.read_resource(request).await.catch()
         } else {
-            Err(GpmcpError::ServiceNotFound)
+            Err(GpmcpError::service_not_found())
         }
     }
 
@@ -159,13 +159,11 @@ impl GpmcpRunnerInner<Initialized> {
 
         // Cancel service first
         if let Some(coordinator) = service_coordinator.write().await.take() {
-            // TODO: Add varient in GpmcpError
             coordinator.cancel().await?;
         }
 
         // Then cleanup process if exists
         if let Some(manager) = process_manager.write().await.take() {
-            // TODO: Add varient in GpmcpError
             manager.cleanup().await;
         }
         info!("GpmcpRunner cancelled successfully");

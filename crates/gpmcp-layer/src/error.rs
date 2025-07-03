@@ -4,8 +4,30 @@ use rmcp::transport::sse_client::SseTransportError;
 use thiserror::Error;
 
 /// Core error types for GPMCP operations
+#[derive(Debug, Error)]
+#[error("{inner}")]
+pub struct GpmcpError {
+    pub inner: Box<GpmcpErrorInner>,
+}
+
+impl GpmcpError {
+    pub fn service_not_found() -> Self {
+        GpmcpError {
+            inner: Box::new(GpmcpErrorInner::ServiceNotFound),
+        }
+    }
+}
+
+impl<T: Into<GpmcpErrorInner>> From<T> for GpmcpError {
+    fn from(value: T) -> Self {
+        GpmcpError {
+            inner: Box::new(value.into()),
+        }
+    }
+}
+
 #[derive(Error, Debug, From)]
-pub enum GpmcpError {
+pub enum GpmcpErrorInner {
     #[error("Service not found or not initialized")]
     ServiceNotFound,
 
@@ -26,9 +48,6 @@ pub enum GpmcpError {
 
     #[error("SSE client initialization error: {0}")]
     SseInitError(ClientInitializeError<SseTransportError<reqwest::Error>>),
-
-    #[error("Server not ready after {max_attempts} attempts.")]
-    UnableToStartServer { max_attempts: u32 },
 }
 
 impl GpmcpError {
