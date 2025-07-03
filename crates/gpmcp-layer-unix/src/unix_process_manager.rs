@@ -15,7 +15,6 @@ mod unix_impl {
     use nix::unistd::Pid as NixPid;
     use sysinfo::System;
     use tokio::process::{Child, Command};
-    use tracing::{info, warn};
 
     /// Unix-specific process handle implementation
     pub struct UnixProcessHandle {
@@ -127,8 +126,10 @@ mod unix_impl {
             // Log successful process creation
             if let Some(pid) = child.id() {
                 info!(
-                    "Spawned Unix process: {} (PID: {}) with args: {:?}",
-                    command, pid, args
+                    command = %command,
+                    pid = %pid,
+                    args = ?args,
+                    "Spawned Unix process"
                 );
             }
 
@@ -275,10 +276,7 @@ mod unix_impl {
                     match self.terminate_single_process(*child_pid).await {
                         TerminationResult::Success | TerminationResult::ProcessNotFound => {}
                         result => {
-                            warn!(
-                                "Failed to terminate child process {}: {:?}",
-                                child_pid.0, result
-                            );
+                            warn!(child_pid = %child_pid.0, result = ?result, "Failed to terminate child process");
                         }
                     }
                 }

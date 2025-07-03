@@ -24,8 +24,8 @@ impl ProcessManager {
     pub async fn new(runner_config: &RunnerConfig) -> Self {
         let platform_manager = PlatformProcessManagerFactory::create_process_manager();
         info!(
-            "Created ProcessManager with platform: {}",
-            PlatformProcessManagerFactory::platform_name()
+                name=%PlatformProcessManagerFactory::platform_name(),
+            "Created ProcessManager with platform"
         );
 
         Self {
@@ -37,7 +37,6 @@ impl ProcessManager {
 
     /// Start the server process from the runner configuration
     pub async fn start_server(&self) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
-
         let config = &self.runner_config;
         let working_dir = config.working_directory.as_ref().and_then(|p| p.to_str());
 
@@ -120,10 +119,7 @@ impl Drop for ProcessManager {
         };
 
         if !active_processes.is_empty() {
-            warn!(
-                "ProcessManager dropped with {} active processes - attempting emergency cleanup",
-                active_processes.len()
-            );
+            warn!(count=%active_processes.len(), "ProcessManager dropped with active processes - attempting emergency cleanup");
 
             // Note: We can't use async in Drop, so we'll do synchronous cleanup
             // This is a best-effort emergency cleanup

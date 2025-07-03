@@ -128,8 +128,10 @@ impl ProcessLifecycle for WindowsProcessManager {
         // Log successful process creation
         if let Some(pid) = child.id() {
             info!(
-                "Spawned Windows process: {} (PID: {}) with args: {:?}",
-                command, pid, args
+                pid = %pid,
+                command = %command,
+                args = ?args,
+                "Spawned Windows process"
             );
         }
 
@@ -184,10 +186,7 @@ impl ProcessTermination for WindowsProcessManager {
         if let Some(pid) = handle.get_pid() {
             match self.taskkill(pid.0, false).await {
                 Ok(true) => {
-                    info!(
-                        "Successfully sent graceful termination to process {}",
-                        pid.0
-                    );
+                    info!(pid=%pid.0, "Successfully sent graceful termination to process");
                     TerminationResult::Success
                 }
                 Ok(false) => {
@@ -211,7 +210,7 @@ impl ProcessTermination for WindowsProcessManager {
                     info!(pid=%pid.0, "Successfully force killed process");
                     // Also call handle's kill method for cleanup
                     if let Err(e) = handle.kill().await {
-                    warn!(error=%e, "Handle kill cleanup failed");
+                        warn!(error=%e, "Handle kill cleanup failed");
                     }
                     TerminationResult::Success
                 }
@@ -250,8 +249,8 @@ impl ProcessTermination for WindowsProcessManager {
         match self.taskkill_tree(root_pid.0).await {
             Ok(true) => {
                 info!(
-                    "Successfully terminated process tree for PID {}",
-                    root_pid.0
+                    root_pid = %root_pid.0,
+                    "Successfully terminated process tree for PID"
                 );
                 TerminationResult::Success
             }
@@ -260,19 +259,14 @@ impl ProcessTermination for WindowsProcessManager {
                 TerminationResult::ProcessNotFound
             }
             Err(e) => {
-                warn!(
-                    "Failed to terminate process tree for PID {}: {}",
-                    root_pid.0, e
-                );
+                warn!(root_pid=%root_pid.0, e=%e, "Failed to terminate process tree for PID");
 
                 // Fallback: manual process tree termination
                 let children = match self.find_child_processes(root_pid).await {
                     Ok(children) => children,
                     Err(e) => {
-                        warn!(
-                            "Failed to find child processes for PID {}: {}",
-                            root_pid.0, e
-                        );
+                        warn!(root_pid=%root_pid.0, e=%e, "Failed to find child processes for PID");
+
                         return TerminationResult::Failed(format!(
                             "Failed to enumerate children: {e}"
                         ));
@@ -281,8 +275,8 @@ impl ProcessTermination for WindowsProcessManager {
 
                 if !children.is_empty() {
                     info!(
-                        "Found {} child processes to terminate manually",
-                        children.len()
+                        count = children.len(),
+                        "Found child processes to terminate manually"
                     );
 
                     // Terminate children first (bottom-up approach)
@@ -291,8 +285,9 @@ impl ProcessTermination for WindowsProcessManager {
                             TerminationResult::Success | TerminationResult::ProcessNotFound => {}
                             result => {
                                 warn!(
-                                    "Failed to terminate child process {}: {:?}",
-                                    child_pid.0, result
+                                    pid = %child_pid.0,
+                                    result = ?result,
+                                    "Failed to terminate child process"
                                 );
                             }
                         }
@@ -380,10 +375,7 @@ impl WindowsProcessManager {
                 TerminationResult::Success
             }
             Err(e) => {
-                warn!(
-                    "Failed to send graceful termination to process {}: {}",
-                    pid.0, e
-                );
+                warn!(pid=%pid.0, error=%e, "Failed to send graceful termination to process");
                 TerminationResult::Failed(format!("Graceful termination failed: {e}"))
             }
         }

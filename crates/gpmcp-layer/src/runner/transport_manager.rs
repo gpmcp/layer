@@ -72,7 +72,7 @@ impl TransportManager {
         // TODO: Add varient in GpmcpError and use that.
         let transport = SseClientTransport::start(url_string).await?;
 
-        info!("SSE transport created successfully"); 
+        info!("SSE transport created successfully");
         Ok(TransportVariant::Sse(transport))
     }
 
@@ -82,10 +82,7 @@ impl TransportManager {
         max_attempts: u32,
         interval_ms: u64,
     ) -> Result<(), GpmcpError> {
-        info!(
-            "Polling server readiness at {} (max {} attempts, {}ms interval)",
-            url, max_attempts, interval_ms
-        );
+        info!(url=%url, max_attempts=?max_attempts, interval_ms=?interval_ms, "Polling server readiness");
 
         let poll = ExponentialBuilder::new()
             .with_jitter()
@@ -121,7 +118,7 @@ impl TransportManager {
 
         // Cancel the test service
         service.cancel().await?;
-        
+
         info!("Server is ready and responding to list_tools request");
         Ok(())
     }
