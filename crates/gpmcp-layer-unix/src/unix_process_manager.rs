@@ -52,7 +52,7 @@ mod unix_impl {
                 let nix_pid = NixPid::from_raw(pid.0 as i32);
                 // Send signal 0 to check if process exists
 
-                if !signal::kill(nix_pid, None).is_ok() {
+                if signal::kill(nix_pid, None).is_err() {
                     info!(pid=%pid.0, "Unix process is no longer running");
                     false
                 } else {

@@ -5,7 +5,7 @@ use anyhow::Result;
 use rmcp::model::{ClientInfo, InitializeRequestParam};
 use rmcp::{ServiceExt, service::RunningService};
 use tokio::task::JoinError;
-use tracing::{info, error};
+use tracing::{error, info};
 
 /// ServiceCoordinator manages the MCP service connection and provides
 /// a unified interface for all MCP operations

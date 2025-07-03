@@ -33,7 +33,6 @@ impl GpmcpRunnerInner<Uninitialized> {
         }
     }
     pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> {
-
         // Determine transport type and create appropriate managers
 
         // Create process manager if needed (for commands that need subprocess)
