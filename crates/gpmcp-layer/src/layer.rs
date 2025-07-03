@@ -6,7 +6,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error};
+use tracing::warn;
 
 #[derive(Clone)]
 pub struct GpmcpLayer<Status> {

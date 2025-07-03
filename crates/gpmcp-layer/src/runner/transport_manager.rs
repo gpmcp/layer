@@ -7,7 +7,7 @@ use rmcp::model::ClientInfo;
 use rmcp::transport::{SseClientTransport, TokioChildProcess};
 use std::time::Duration;
 use tokio::process::Command;
-use tracing::{info, warn};
+use tracing::info;
 
 /// TransportManager handles the creation and management of different transport types
 pub struct TransportManager {
@@ -28,7 +28,7 @@ impl TransportManager {
                 Self::create_stdio_transport(runner_config.clone()).await?
             }
             Transport::Sse { url } => {
-                info!("Creating SSE transport for URL: {}", url);
+                info!(url=%url, "Creating SSE transport for URL");
                 Self::create_sse_transport(url).await?
             }
         };

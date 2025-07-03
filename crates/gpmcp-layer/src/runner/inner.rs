@@ -85,7 +85,7 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::CallToolRequestParam,
     ) -> Result<rmcp::model::CallToolResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            info!("Calling tool: {}", request.name);
+            info!(tool_name=%request.name, "Calling tool");
             coordinator.call_tool(request).await.catch()
         } else {
             error!("Service coordinator not available for call_tool operation");
@@ -121,7 +121,7 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::GetPromptRequestParam,
     ) -> Result<rmcp::model::GetPromptResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            info!("Getting prompt: {}", request.name);
+            info!(prompt_name=%request.name, "Getting prompt");
             coordinator.get_prompt(request).await.catch()
         } else {
             error!("Service coordinator not available for get_prompt operation");
@@ -135,7 +135,7 @@ impl GpmcpRunnerInner<Initialized> {
         request: rmcp::model::ReadResourceRequestParam,
     ) -> Result<rmcp::model::ReadResourceResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {
-            info!("Reading resource: {}", request.uri);
+            info!(resource_uri=%request.uri, "Reading resource");
             coordinator.read_resource(request).await.catch()
         } else {
             error!("Service coordinator not available for read_resource operation");

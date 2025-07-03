@@ -6,6 +6,7 @@ use gpmcp_layer_core::{
 };
 use std::collections::HashMap;
 use std::time::Duration;
+use tracing::{info, warn};
 
 #[cfg(unix)]
 mod unix_impl {
@@ -53,10 +54,10 @@ mod unix_impl {
                 // Send signal 0 to check if process exists
 
                 if !signal::kill(nix_pid, None).is_ok() {
-                    info!("Unix process {} is no longer running", pid.0);
+                    info!(pid=%pid.0, "Unix process is no longer running");
                     false
                 } else {
-                    info!("Unix process {} is still running", pid.0);
+                    info!(pid=%pid.0, "Unix process is still running");
                     true
                 }
             } else {
@@ -183,19 +184,19 @@ mod unix_impl {
 
                 match signal::kill(nix_pid, Signal::SIGTERM) {
                     Ok(()) => {
-                        info!("Sent SIGTERM to process {}", pid.0);
+                        info!(pid=%pid.0, "Sent SIGTERM to process");
                         TerminationResult::Success
                     }
                     Err(nix::errno::Errno::ESRCH) => {
-                        info!("Process {} not found (already terminated)", pid.0);
+                        info!(pid=%pid.0, "Process not found (already terminated)");
                         TerminationResult::ProcessNotFound
                     }
                     Err(nix::errno::Errno::EPERM) => {
-                        warn!("Permission denied to terminate process {}", pid.0);
+                        warn!(pid=%pid.0, "Permission denied to terminate process");
                         TerminationResult::AccessDenied
                     }
                     Err(e) => {
-                        warn!("Failed to send SIGTERM to process {}: {}", pid.0, e);
+                        warn!(pid=%pid.0, error=%e, "Failed to send SIGTERM to process");
                         TerminationResult::Failed(format!("SIGTERM failed: {e}"))
                     }
                 }
@@ -210,23 +211,23 @@ mod unix_impl {
 
                 match signal::kill(nix_pid, Signal::SIGKILL) {
                     Ok(()) => {
-                        info!("Sent SIGKILL to process {}", pid.0);
+                        info!(pid=%pid.0, "Sent SIGKILL to process");
                         // Also call handle's kill method for cleanup
                         if let Err(e) = handle.kill().await {
-                            warn!("Handle kill cleanup failed: {}", e);
+                            warn!(error=%e, "Handle kill cleanup failed");
                         }
                         TerminationResult::Success
                     }
                     Err(nix::errno::Errno::ESRCH) => {
-                        info!("Process {} not found (already terminated)", pid.0);
+                        info!(pid=%pid.0, "Process not found (already terminated)");
                         TerminationResult::ProcessNotFound
                     }
                     Err(nix::errno::Errno::EPERM) => {
-                        warn!("Permission denied to kill process {}", pid.0);
+                        warn!(pid=%pid.0, "Permission denied to kill process");
                         TerminationResult::AccessDenied
                     }
                     Err(e) => {
-                        warn!("Failed to send SIGKILL to process {}: {}", pid.0, e);
+                        warn!(pid=%pid.0, error=%e, "Failed to send SIGKILL to process");
                         TerminationResult::Failed(format!("SIGKILL failed: {e}"))
                     }
                 }
@@ -250,24 +251,24 @@ mod unix_impl {
         }
 
         async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {
-            info!("Terminating process tree for root PID {}", root_pid.0);
+            info!(root_pid=%root_pid.0, "Terminating process tree for root PID");
 
             // Find all child processes
             let children = match self.find_child_processes(root_pid).await {
                 Ok(children) => children,
                 Err(e) => {
                     warn!(
-                        "Failed to find child processes for PID {}: {}",
-                        root_pid.0, e
+                        root_pid=%root_pid.0, error=%e,
+                        "Failed to find child processes for PID"
                     );
                     return TerminationResult::Failed(format!("Failed to enumerate children: {e}"));
                 }
             };
 
             if children.is_empty() {
-                info!("No child processes found for PID {}", root_pid.0);
+                info!(root_pid=%root_pid.0, "No child processes found for PID");
             } else {
-                info!("Found {} child processes to terminate", children.len());
+                info!(root_pid=%root_pid.0, count=%children.len(), "Found child processes to terminate");
 
                 // Terminate children first (bottom-up approach)
                 for child_pid in children.iter().rev() {
@@ -293,7 +294,7 @@ mod unix_impl {
             // Try SIGTERM first for graceful shutdown
             match signal::killpg(pgid, Signal::SIGTERM) {
                 Ok(()) => {
-                    info!("Sent SIGTERM to process group {}", pid.0);
+                    info!(pid=%pid.0, "Sent SIGTERM to process group");
 
                     // Wait for graceful shutdown
                     tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -301,15 +302,15 @@ mod unix_impl {
                     // Check if processes are still running, if so use SIGKILL
                     match signal::killpg(pgid, Signal::SIGKILL) {
                         Ok(()) => {
-                            info!("Sent SIGKILL to process group {}", pid.0);
+                            info!(pid=%pid.0, "Sent SIGKILL to process group");
                             TerminationResult::Success
                         }
                         Err(nix::errno::Errno::ESRCH) => {
-                            info!("Process group {} already terminated", pid.0);
+                            info!(pid=%pid.0, "Process group already terminated");
                             TerminationResult::Success
                         }
                         Err(e) => {
-                            warn!("Failed to send SIGKILL to process group {}: {}", pid.0, e);
+                            warn!(pid=%pid.0, error=%e, "Failed to send SIGKILL to process group");
                             TerminationResult::Failed(format!(
                                 "SIGKILL to process group failed: {e}"
                             ))
@@ -317,15 +318,15 @@ mod unix_impl {
                     }
                 }
                 Err(nix::errno::Errno::ESRCH) => {
-                    info!("Process group {} not found (already terminated)", pid.0);
+                    info!(pid=%pid.0, "Process group not found (already terminated)");
                     TerminationResult::Success
                 }
                 Err(nix::errno::Errno::EPERM) => {
-                    warn!("Permission denied to terminate process group {}", pid.0);
+                    warn!(pid=%pid.0, "Permission denied to terminate process group");
                     TerminationResult::AccessDenied
                 }
                 Err(e) => {
-                    warn!("Failed to send SIGTERM to process group {}: {}", pid.0, e);
+                    warn!(pid=%pid.0, error=%e, "Failed to send SIGTERM to process group");
                     TerminationResult::Failed(format!("SIGTERM to process group failed: {e}"))
                 }
             }
@@ -340,7 +341,7 @@ mod unix_impl {
             // Try SIGTERM first
             match signal::kill(nix_pid, Signal::SIGTERM) {
                 Ok(()) => {
-                    info!("Sent SIGTERM to process {}", pid.0);
+                    info!(pid=%pid.0, "Sent SIGTERM to process");
 
                     // Wait briefly for graceful shutdown
                     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -348,29 +349,29 @@ mod unix_impl {
                     // Then SIGKILL if still running
                     match signal::kill(nix_pid, Signal::SIGKILL) {
                         Ok(()) => {
-                            info!("Sent SIGKILL to process {}", pid.0);
+                            info!(pid=%pid.0, "Sent SIGKILL to process");
                             TerminationResult::Success
                         }
                         Err(nix::errno::Errno::ESRCH) => {
-                            info!("Process {} already terminated", pid.0);
+                            info!(pid=%pid.0, "Process already terminated");
                             TerminationResult::Success
                         }
                         Err(e) => {
-                            warn!("Failed to kill process {}: {}", pid.0, e);
+                            warn!(pid=%pid.0, error=%e, "Failed to kill process");
                             TerminationResult::Failed(format!("SIGKILL failed: {e}"))
                         }
                     }
                 }
                 Err(nix::errno::Errno::ESRCH) => {
-                    info!("Process {} not found (already terminated)", pid.0);
+                    info!(pid=%pid.0, "Process not found (already terminated)");
                     TerminationResult::Success
                 }
                 Err(nix::errno::Errno::EPERM) => {
-                    warn!("Permission denied to terminate process {}", pid.0);
+                    warn!(pid=%pid.0, "Permission denied to terminate process");
                     TerminationResult::AccessDenied
                 }
                 Err(e) => {
-                    warn!("Failed to send SIGTERM to process {}: {e}", pid.0,);
+                    warn!(pid=%pid.0, error=%e, "Failed to send SIGTERM to process");
                     TerminationResult::Failed(format!("SIGTERM failed: {e}",))
                 }
             }

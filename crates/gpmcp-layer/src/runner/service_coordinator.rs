@@ -109,7 +109,7 @@ impl ServiceCoordinator {
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to cancel service coordinator: {}", e);
+                error!(error=%e, "Failed to cancel service coordinator");
                 Err(e)
             }
         }

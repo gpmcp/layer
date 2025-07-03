@@ -60,7 +60,7 @@ impl ProcessManager {
     ) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
         let env = env.cloned().unwrap_or_default();
 
-        debug!("Spawning process: {} with args: {:?}", command, args);
+        debug!(command=%command, ?args, "Spawning process");
 
         let handle = self
             .platform_manager
@@ -71,7 +71,7 @@ impl ProcessManager {
         if let Some(pid) = handle.get_pid() {
             let mut active = self.active_processes.lock().unwrap();
             active.insert(pid, command.to_string());
-            info!("Tracking new process: {} (PID: {})", command, pid.0);
+            info!(command=%command, pid=%pid.0, "Tracking new process");
         }
 
         Ok(handle)
@@ -87,15 +87,15 @@ impl ProcessManager {
         };
 
         if !active_processes.is_empty() {
-            warn!("Cleaning up {} active processes", active_processes.len());
+            warn!(count=%active_processes.len(), "Cleaning up active processes");
 
             for pid in active_processes {
                 match self.platform_manager.terminate_process_tree(pid).await {
                     TerminationResult::Success | TerminationResult::ProcessNotFound => {
-                        debug!("Successfully cleaned up process {}", pid.0);
+                        debug!(pid=%pid.0, "Successfully cleaned up process");
                     }
                     result => {
-                        error!("Failed to cleanup process {}: {:?}", pid.0, result);
+                        error!(pid=%pid.0, ?result, "Failed to cleanup process");
                     }
                 }
             }
@@ -135,7 +135,7 @@ impl Drop for ProcessManager {
 
                     let nix_pid = NixPid::from_raw(pid.0 as i32);
                     if let Err(e) = signal::kill(nix_pid, Signal::SIGTERM) {
-                        warn!("Emergency cleanup failed for process {}: {}", pid.0, e);
+                        warn!(pid=%pid.0, error=%e, "Emergency cleanup failed for process");
                     }
                 }
 
@@ -147,7 +147,7 @@ impl Drop for ProcessManager {
                         .args(&["/F", "/T", "/PID", &pid.0.to_string()])
                         .output()
                     {
-                        warn!("Emergency cleanup failed for process {}: {}", pid.0, e);
+                        warn!(pid=%pid.0, error=%e, "Emergency cleanup failed for process");
                     }
                 }
             }

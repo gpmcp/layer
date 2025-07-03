@@ -50,7 +50,7 @@ impl ProcessHandle for WindowsProcessHandle {
                 sysinfo::ProcessRefreshKind::everything(),
             );
             if system.processes().iter().any(|(p, _)| p.as_u32() == _pid.0) {
-                info!("Windows process {} is no longer running", _pid.0);
+                info!(pid=%_pid.0, "Windows process is no longer running");
                 false
             } else {
                 true
@@ -191,11 +191,11 @@ impl ProcessTermination for WindowsProcessManager {
                     TerminationResult::Success
                 }
                 Ok(false) => {
-                    warn!("Process {} not found for graceful termination", pid.0);
+                    warn!(pid=%pid.0, "Process not found for graceful termination");
                     TerminationResult::ProcessNotFound
                 }
                 Err(e) => {
-                    warn!("Failed to gracefully terminate process {}: {}", pid.0, e);
+                    warn!(pid=%pid.0, error=%e, "Failed to gracefully terminate process");
                     TerminationResult::Failed(format!("Graceful termination failed: {e}"))
                 }
             }
@@ -208,19 +208,19 @@ impl ProcessTermination for WindowsProcessManager {
         if let Some(pid) = handle.get_pid() {
             match self.taskkill(pid.0, true).await {
                 Ok(true) => {
-                    info!("Successfully force killed process {}", pid.0);
+                    info!(pid=%pid.0, "Successfully force killed process");
                     // Also call handle's kill method for cleanup
                     if let Err(e) = handle.kill().await {
-                        warn!("Handle kill cleanup failed: {}", e);
+                    warn!(error=%e, "Handle kill cleanup failed");
                     }
                     TerminationResult::Success
                 }
                 Ok(false) => {
-                    info!("Process {} not found for force kill", pid.0);
+                    info!(pid=%pid.0, "Process not found for force kill");
                     TerminationResult::ProcessNotFound
                 }
                 Err(e) => {
-                    warn!("Failed to force kill process {}: {}", pid.0, e);
+                    warn!(pid=%pid.0, error=%e, "Failed to force kill process");
                     TerminationResult::Failed(format!("Force kill failed: {e}"))
                 }
             }
@@ -244,7 +244,7 @@ impl ProcessTermination for WindowsProcessManager {
     }
 
     async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {
-        info!("Terminating process tree for root PID {}", root_pid.0);
+        info!(root_pid=%root_pid.0, "Terminating process tree for root PID");
 
         // On Windows, we can use taskkill with /T flag to kill process trees
         match self.taskkill_tree(root_pid.0).await {
@@ -256,7 +256,7 @@ impl ProcessTermination for WindowsProcessManager {
                 TerminationResult::Success
             }
             Ok(false) => {
-                info!("Process tree for PID {} not found", root_pid.0);
+                info!(root_pid=%root_pid.0, "Process tree for PID not found");
                 TerminationResult::ProcessNotFound
             }
             Err(e) => {
@@ -341,7 +341,7 @@ impl WindowsProcessManager {
         // Try graceful termination first
         match self.taskkill(pid.0, false).await {
             Ok(true) => {
-                info!("Sent graceful termination to process {}", pid.0);
+                info!(pid=%pid.0, "Sent graceful termination to process");
 
                 // Wait briefly for graceful shutdown
                 tokio::time::sleep(Duration::from_millis(1000)).await;
@@ -358,25 +358,25 @@ impl WindowsProcessManager {
                     // Process still running, force kill
                     match self.taskkill(pid.0, true).await {
                         Ok(true) => {
-                            info!("Force killed process {}", pid.0);
+                            info!(pid=%pid.0, "Force killed process");
                             TerminationResult::Success
                         }
                         Ok(false) => {
-                            info!("Process {} already terminated", pid.0);
+                            info!(pid=%pid.0, "Process already terminated");
                             TerminationResult::Success
                         }
                         Err(e) => {
-                            warn!("Failed to force kill process {}: {}", pid.0, e);
+                            warn!(pid=%pid.0, error=%e, "Failed to force kill process");
                             TerminationResult::Failed(format!("Force kill failed: {e}"))
                         }
                     }
                 } else {
-                    info!("Process {} terminated gracefully", pid.0);
+                    info!(pid=%pid.0, "Process terminated gracefully");
                     TerminationResult::Success
                 }
             }
             Ok(false) => {
-                info!("Process {} not found (already terminated)", pid.0);
+                info!(pid=%pid.0, "Process not found (already terminated)");
                 TerminationResult::Success
             }
             Err(e) => {
