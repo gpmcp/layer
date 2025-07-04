@@ -1,9 +1,12 @@
-use tracing::info;
-use async_trait::async_trait;
-use gpmcp_layer_core::{ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessTermination, ProcessStatus, TerminationResult};
 use anyhow::Result;
+use async_trait::async_trait;
+use gpmcp_layer_core::{
+    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessStatus, ProcessTermination,
+    TerminationResult,
+};
 use std::collections::HashMap;
 use std::time::Duration;
+use tracing::info;
 
 /// Platform-specific process manager implementations
 #[derive(Clone)]
@@ -19,13 +22,17 @@ impl PlatformProcessManager {
         #[cfg(unix)]
         {
             info!("Creating Unix process manager");
-            Self::Unix(std::sync::Arc::new(gpmcp_layer_unix::UnixProcessManagerFactory::create_process_manager()))
+            Self::Unix(std::sync::Arc::new(
+                gpmcp_layer_unix::UnixProcessManagerFactory::create_process_manager(),
+            ))
         }
 
         #[cfg(windows)]
         {
             info!("Creating Windows process manager");
-            Self::Windows(std::sync::Arc::new(gpmcp_layer_windows::WindowsProcessManagerFactory::create_process_manager()))
+            Self::Windows(std::sync::Arc::new(
+                gpmcp_layer_windows::WindowsProcessManagerFactory::create_process_manager(),
+            ))
         }
 
         #[cfg(not(any(unix, windows)))]

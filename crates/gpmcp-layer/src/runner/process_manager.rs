@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
-use super::platform_factory::{PlatformProcessManagerFactory, PlatformProcessManager};
+use super::platform_factory::{PlatformProcessManager, PlatformProcessManagerFactory};
 use crate::RunnerConfig;
 use gpmcp_layer_core::{
     ProcessHandle, ProcessId, ProcessLifecycle, ProcessTermination, TerminationResult,
