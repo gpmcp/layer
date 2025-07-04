@@ -3,18 +3,17 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
-use super::platform_factory::PlatformProcessManagerFactory;
+use super::platform_factory::{PlatformProcessManagerFactory, PlatformProcessManager};
 use crate::RunnerConfig;
 use gpmcp_layer_core::{
-    ProcessHandle, ProcessId, ProcessManager as ProcessManagerTrait, ProcessManagerFactory,
-    TerminationResult,
+    ProcessHandle, ProcessId, ProcessLifecycle, ProcessTermination, TerminationResult,
 };
 
 /// High-level process manager that wraps platform-specific implementations
 /// This is the main interface used by the MCP middleware
 #[derive(Clone)]
 pub struct ProcessManager {
-    platform_manager: Arc<dyn ProcessManagerTrait>,
+    platform_manager: Arc<PlatformProcessManager>,
     active_processes: Arc<std::sync::Mutex<HashMap<ProcessId, String>>>,
     runner_config: RunnerConfig,
 }
@@ -29,7 +28,7 @@ impl ProcessManager {
         );
 
         Self {
-            platform_manager: Arc::from(platform_manager),
+            platform_manager,
             active_processes: Arc::new(std::sync::Mutex::new(HashMap::new())),
             runner_config: runner_config.clone(),
         }

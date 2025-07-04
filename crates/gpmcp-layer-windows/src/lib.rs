@@ -7,13 +7,12 @@ pub use windows_process_manager::WindowsProcessManager;
 /// Windows-specific process manager factory
 pub struct WindowsProcessManagerFactory;
 
-impl gpmcp_layer_core::ProcessManagerFactory for WindowsProcessManagerFactory {
-    fn create_process_manager() -> Box<dyn gpmcp_layer_core::ProcessManager> {
-        use gpmcp_layer_core::ProcessManager;
-        Box::new(WindowsProcessManager::new())
+impl WindowsProcessManagerFactory {
+    pub fn create_process_manager() -> WindowsProcessManager {
+        WindowsProcessManager::new()
     }
 
-    fn platform_name() -> &'static str {
+    pub fn platform_name() -> &'static str {
         "Windows"
     }
 }

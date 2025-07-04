@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use gpmcp_layer_core::{
-    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus,
+    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessStatus,
     ProcessTermination, TerminationResult,
 };
 use std::collections::HashMap;
@@ -392,9 +392,8 @@ mod unix_impl {
         }
     }
 
-    #[async_trait]
-    impl ProcessManager for UnixProcessManager {
-        fn new() -> Self {
+    impl UnixProcessManager {
+        pub fn new() -> Self {
             info!("Initializing Unix process manager with system monitoring");
             Self {
                 system: std::sync::Mutex::new(System::new_all()),

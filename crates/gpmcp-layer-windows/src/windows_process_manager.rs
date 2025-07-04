@@ -398,9 +398,8 @@ impl WindowsProcessManager {
     }
 }
 
-#[async_trait]
-impl ProcessManager for WindowsProcessManager {
-    fn new() -> Self {
+impl WindowsProcessManager {
+    pub fn new() -> Self {
         info!("Initializing Windows process manager with system monitoring");
         Self {
             system: std::sync::Mutex::new(System::new_all()),

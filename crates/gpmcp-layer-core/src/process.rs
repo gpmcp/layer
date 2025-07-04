@@ -163,21 +163,5 @@ pub trait ProcessHandle: Send + Sync {
     async fn kill(&mut self) -> Result<()>;
 }
 
-// FIXME: Drop me.
-/// High-level process manager trait that combines lifecycle and termination
-#[async_trait]
-pub trait ProcessManager: ProcessLifecycle + ProcessTermination {
-    /// Create a new process manager instance
-    fn new() -> Self
-    where
-        Self: Sized;
-}
 
-/// Factory trait for creating platform-specific process managers
-pub trait ProcessManagerFactory {
-    /// Create a process manager for the current platform
-    fn create_process_manager() -> Box<dyn ProcessManager>;
 
-    /// Get the platform name for logging and debugging
-    fn platform_name() -> &'static str;
-}

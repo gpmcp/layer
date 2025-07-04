@@ -542,6 +542,7 @@ name = "gpmcp-layer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "backon",
  "derive_more",
  "gpmcp-layer-core",
