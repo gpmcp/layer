@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -49,8 +49,14 @@ impl ProcessHandle for WindowsProcessHandle {
                 true,
                 sysinfo::ProcessRefreshKind::everything(),
             );
-            system.processes().iter().any(|(p, _)| p.as_u32() == _pid.0)
+            if system.processes().iter().any(|(p, _)| p.as_u32() == _pid.0) {
+                info!(pid=%_pid.0, "Windows process is no longer running");
+                false
+            } else {
+                true
+            }
         } else {
+            warn!("Windows process handle has no PID - process may have exited");
             false
         }
     }
@@ -94,7 +100,7 @@ impl ProcessLifecycle for WindowsProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: &HashMap<String, String>,
-    ) -> Result<Box<dyn ProcessHandle>> {
+    ) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
         let mut cmd = Command::new(command);
         cmd.args(args);
 
@@ -117,15 +123,15 @@ impl ProcessLifecycle for WindowsProcessManager {
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
-        let child = cmd
-            .spawn()
-            .with_context(|| format!("Failed to spawn process: {command}"))?;
+        let child = cmd.spawn()?;
 
         // Log successful process creation
         if let Some(pid) = child.id() {
             info!(
-                "Spawned Windows process: {} (PID: {}) with args: {:?}",
-                command, pid, args
+                pid = %pid,
+                command = %command,
+                args = ?args,
+                "Spawned Windows process"
             );
         }
 
@@ -180,18 +186,15 @@ impl ProcessTermination for WindowsProcessManager {
         if let Some(pid) = handle.get_pid() {
             match self.taskkill(pid.0, false).await {
                 Ok(true) => {
-                    info!(
-                        "Successfully sent graceful termination to process {}",
-                        pid.0
-                    );
+                    info!(pid=%pid.0, "Successfully sent graceful termination to process");
                     TerminationResult::Success
                 }
                 Ok(false) => {
-                    warn!("Process {} not found for graceful termination", pid.0);
+                    warn!(pid=%pid.0, "Process not found for graceful termination");
                     TerminationResult::ProcessNotFound
                 }
                 Err(e) => {
-                    warn!("Failed to gracefully terminate process {}: {}", pid.0, e);
+                    warn!(pid=%pid.0, error=%e, "Failed to gracefully terminate process");
                     TerminationResult::Failed(format!("Graceful termination failed: {e}"))
                 }
             }
@@ -204,19 +207,19 @@ impl ProcessTermination for WindowsProcessManager {
         if let Some(pid) = handle.get_pid() {
             match self.taskkill(pid.0, true).await {
                 Ok(true) => {
-                    info!("Successfully force killed process {}", pid.0);
+                    info!(pid=%pid.0, "Successfully force killed process");
                     // Also call handle's kill method for cleanup
                     if let Err(e) = handle.kill().await {
-                        warn!("Handle kill cleanup failed: {}", e);
+                        warn!(error=%e, "Handle kill cleanup failed");
                     }
                     TerminationResult::Success
                 }
                 Ok(false) => {
-                    info!("Process {} not found for force kill", pid.0);
+                    info!(pid=%pid.0, "Process not found for force kill");
                     TerminationResult::ProcessNotFound
                 }
                 Err(e) => {
-                    warn!("Failed to force kill process {}: {}", pid.0, e);
+                    warn!(pid=%pid.0, error=%e, "Failed to force kill process");
                     TerminationResult::Failed(format!("Force kill failed: {e}"))
                 }
             }
@@ -240,35 +243,30 @@ impl ProcessTermination for WindowsProcessManager {
     }
 
     async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {
-        info!("Terminating process tree for root PID {}", root_pid.0);
+        info!(root_pid=%root_pid.0, "Terminating process tree for root PID");
 
         // On Windows, we can use taskkill with /T flag to kill process trees
         match self.taskkill_tree(root_pid.0).await {
             Ok(true) => {
                 info!(
-                    "Successfully terminated process tree for PID {}",
-                    root_pid.0
+                    root_pid = %root_pid.0,
+                    "Successfully terminated process tree for PID"
                 );
                 TerminationResult::Success
             }
             Ok(false) => {
-                info!("Process tree for PID {} not found", root_pid.0);
+                info!(root_pid=%root_pid.0, "Process tree for PID not found");
                 TerminationResult::ProcessNotFound
             }
             Err(e) => {
-                warn!(
-                    "Failed to terminate process tree for PID {}: {}",
-                    root_pid.0, e
-                );
+                warn!(root_pid=%root_pid.0, e=%e, "Failed to terminate process tree for PID");
 
                 // Fallback: manual process tree termination
                 let children = match self.find_child_processes(root_pid).await {
                     Ok(children) => children,
                     Err(e) => {
-                        warn!(
-                            "Failed to find child processes for PID {}: {}",
-                            root_pid.0, e
-                        );
+                        warn!(root_pid=%root_pid.0, e=%e, "Failed to find child processes for PID");
+
                         return TerminationResult::Failed(format!(
                             "Failed to enumerate children: {e}"
                         ));
@@ -277,8 +275,8 @@ impl ProcessTermination for WindowsProcessManager {
 
                 if !children.is_empty() {
                     info!(
-                        "Found {} child processes to terminate manually",
-                        children.len()
+                        count = children.len(),
+                        "Found child processes to terminate manually"
                     );
 
                     // Terminate children first (bottom-up approach)
@@ -287,8 +285,9 @@ impl ProcessTermination for WindowsProcessManager {
                             TerminationResult::Success | TerminationResult::ProcessNotFound => {}
                             result => {
                                 warn!(
-                                    "Failed to terminate child process {}: {:?}",
-                                    child_pid.0, result
+                                    pid = %child_pid.0,
+                                    result = ?result,
+                                    "Failed to terminate child process"
                                 );
                             }
                         }
@@ -337,7 +336,7 @@ impl WindowsProcessManager {
         // Try graceful termination first
         match self.taskkill(pid.0, false).await {
             Ok(true) => {
-                info!("Sent graceful termination to process {}", pid.0);
+                info!(pid=%pid.0, "Sent graceful termination to process");
 
                 // Wait briefly for graceful shutdown
                 tokio::time::sleep(Duration::from_millis(1000)).await;
@@ -354,32 +353,29 @@ impl WindowsProcessManager {
                     // Process still running, force kill
                     match self.taskkill(pid.0, true).await {
                         Ok(true) => {
-                            info!("Force killed process {}", pid.0);
+                            info!(pid=%pid.0, "Force killed process");
                             TerminationResult::Success
                         }
                         Ok(false) => {
-                            info!("Process {} already terminated", pid.0);
+                            info!(pid=%pid.0, "Process already terminated");
                             TerminationResult::Success
                         }
                         Err(e) => {
-                            warn!("Failed to force kill process {}: {}", pid.0, e);
+                            warn!(pid=%pid.0, error=%e, "Failed to force kill process");
                             TerminationResult::Failed(format!("Force kill failed: {e}"))
                         }
                     }
                 } else {
-                    info!("Process {} terminated gracefully", pid.0);
+                    info!(pid=%pid.0, "Process terminated gracefully");
                     TerminationResult::Success
                 }
             }
             Ok(false) => {
-                info!("Process {} not found (already terminated)", pid.0);
+                info!(pid=%pid.0, "Process not found (already terminated)");
                 TerminationResult::Success
             }
             Err(e) => {
-                warn!(
-                    "Failed to send graceful termination to process {}: {}",
-                    pid.0, e
-                );
+                warn!(pid=%pid.0, error=%e, "Failed to send graceful termination to process");
                 TerminationResult::Failed(format!("Graceful termination failed: {e}"))
             }
         }
@@ -402,16 +398,11 @@ impl WindowsProcessManager {
     }
 }
 
-#[async_trait]
-impl ProcessManager for WindowsProcessManager {
-    fn new() -> Self {
+impl WindowsProcessManager {
+    pub fn new() -> Self {
+        info!("Initializing Windows process manager with system monitoring");
         Self {
             system: std::sync::Mutex::new(System::new_all()),
         }
-    }
-
-    async fn cleanup(&self) -> Result<()> {
-        info!("Windows process manager cleanup completed");
-        Ok(())
     }
 }

@@ -6,6 +6,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::sync::Mutex;
+use tracing::warn;
 
 #[derive(Clone)]
 pub struct GpmcpLayer<Status> {
@@ -14,18 +15,12 @@ pub struct GpmcpLayer<Status> {
     retry_config: ExponentialBuilder,
 }
 impl GpmcpLayer<Uninitialized> {
-    pub fn new(runner_config: RunnerConfig) -> Result<Self, GpmcpError> {
-        // Validate retry config at construction time
-        runner_config
-            .retry_config
-            .validate()
-            .map_err(|e| GpmcpError::ConfigurationError(format!("Invalid retry config: {e}")))?;
-
-        Ok(Self {
+    pub fn new(runner_config: RunnerConfig) -> Self {
+        Self {
             inner: Arc::new(Mutex::new(GpmcpRunnerInner::new(runner_config.clone()))),
             retry_config: Self::create_retry_strategy(&runner_config.retry_config),
             runner_config,
-        })
+        }
     }
     pub async fn connect(self) -> Result<GpmcpLayer<Initialized>, GpmcpError> {
         let initialized_inner = self.inner.lock().await.connect().await?;
@@ -63,6 +58,7 @@ impl GpmcpLayer<Initialized> {
         // Create the operation closure that handles connection management
         let operation_with_connection = || async {
             if is_retry.load(std::sync::atomic::Ordering::Relaxed) {
+                warn!("Reconnecting due to retry attempt");
                 let new = GpmcpRunnerInner::new(self.runner_config.clone());
                 *self.inner.lock().await = new.connect().await?;
             }

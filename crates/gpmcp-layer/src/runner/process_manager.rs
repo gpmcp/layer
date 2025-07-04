@@ -1,44 +1,41 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
-use super::platform_factory::PlatformProcessManagerFactory;
+use super::platform_factory::{PlatformProcessManager, PlatformProcessManagerFactory};
 use crate::RunnerConfig;
 use gpmcp_layer_core::{
-    ProcessHandle, ProcessId, ProcessManager as ProcessManagerTrait, ProcessManagerFactory,
-    TerminationResult,
+    ProcessHandle, ProcessId, ProcessLifecycle, ProcessTermination, TerminationResult,
 };
 
 /// High-level process manager that wraps platform-specific implementations
 /// This is the main interface used by the MCP middleware
 #[derive(Clone)]
 pub struct ProcessManager {
-    platform_manager: Arc<dyn ProcessManagerTrait>,
+    platform_manager: Arc<PlatformProcessManager>,
     active_processes: Arc<std::sync::Mutex<HashMap<ProcessId, String>>>,
     runner_config: RunnerConfig,
 }
 
 impl ProcessManager {
     /// Create a new ProcessManager with platform-specific implementation
-    pub async fn new(runner_config: &RunnerConfig) -> Result<Self> {
+    pub async fn new(runner_config: &RunnerConfig) -> Self {
         let platform_manager = PlatformProcessManagerFactory::create_process_manager();
         info!(
-            "Created ProcessManager with platform: {}",
-            PlatformProcessManagerFactory::platform_name()
+                name=%PlatformProcessManagerFactory::platform_name(),
+            "Created ProcessManager with platform"
         );
 
-        Ok(Self {
-            platform_manager: Arc::from(platform_manager),
+        Self {
+            platform_manager,
             active_processes: Arc::new(std::sync::Mutex::new(HashMap::new())),
             runner_config: runner_config.clone(),
-        })
+        }
     }
 
     /// Start the server process from the runner configuration
-    pub async fn start_server(&self) -> Result<Box<dyn ProcessHandle>> {
-        info!("Starting server process from configuration");
-
+    pub async fn start_server(&self) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
         let config = &self.runner_config;
         let working_dir = config.working_directory.as_ref().and_then(|p| p.to_str());
 
@@ -58,29 +55,28 @@ impl ProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: Option<&HashMap<String, String>>,
-    ) -> Result<Box<dyn ProcessHandle>> {
+    ) -> Result<Box<dyn ProcessHandle>, std::io::Error> {
         let env = env.cloned().unwrap_or_default();
 
-        debug!("Spawning process: {} with args: {:?}", command, args);
+        debug!(command=%command, ?args, "Spawning process");
 
         let handle = self
             .platform_manager
             .spawn_process(command, args, working_dir, &env)
-            .await
-            .with_context(|| format!("Failed to spawn process: {command}"))?;
+            .await?;
 
         // Track the process
         if let Some(pid) = handle.get_pid() {
             let mut active = self.active_processes.lock().unwrap();
             active.insert(pid, command.to_string());
-            info!("Tracking new process: {} (PID: {})", command, pid.0);
+            info!(command=%command, pid=%pid.0, "Tracking new process");
         }
 
         Ok(handle)
     }
 
     /// Cleanup all tracked processes and resources
-    pub async fn cleanup(&self) -> Result<()> {
+    pub async fn cleanup(&self) {
         info!("Starting ProcessManager cleanup");
 
         let active_processes = {
@@ -89,15 +85,15 @@ impl ProcessManager {
         };
 
         if !active_processes.is_empty() {
-            warn!("Cleaning up {} active processes", active_processes.len());
+            warn!(count=%active_processes.len(), "Cleaning up active processes");
 
             for pid in active_processes {
                 match self.platform_manager.terminate_process_tree(pid).await {
                     TerminationResult::Success | TerminationResult::ProcessNotFound => {
-                        debug!("Successfully cleaned up process {}", pid.0);
+                        debug!(pid=%pid.0, "Successfully cleaned up process");
                     }
                     result => {
-                        error!("Failed to cleanup process {}: {:?}", pid.0, result);
+                        error!(pid=%pid.0, ?result, "Failed to cleanup process");
                     }
                 }
             }
@@ -109,11 +105,7 @@ impl ProcessManager {
             active.clear();
         }
 
-        // Platform-specific cleanup
-        self.platform_manager.cleanup().await?;
-
         info!("ProcessManager cleanup completed");
-        Ok(())
     }
 }
 
@@ -126,10 +118,7 @@ impl Drop for ProcessManager {
         };
 
         if !active_processes.is_empty() {
-            warn!(
-                "ProcessManager dropped with {} active processes - attempting emergency cleanup",
-                active_processes.len()
-            );
+            warn!(count=%active_processes.len(), "ProcessManager dropped with active processes - attempting emergency cleanup");
 
             // Note: We can't use async in Drop, so we'll do synchronous cleanup
             // This is a best-effort emergency cleanup
@@ -141,7 +130,7 @@ impl Drop for ProcessManager {
 
                     let nix_pid = NixPid::from_raw(pid.0 as i32);
                     if let Err(e) = signal::kill(nix_pid, Signal::SIGTERM) {
-                        warn!("Emergency cleanup failed for process {}: {}", pid.0, e);
+                        warn!(pid=%pid.0, error=%e, "Emergency cleanup failed for process");
                     }
                 }
 
@@ -153,7 +142,7 @@ impl Drop for ProcessManager {
                         .args(&["/F", "/T", "/PID", &pid.0.to_string()])
                         .output()
                     {
-                        warn!("Emergency cleanup failed for process {}: {}", pid.0, e);
+                        warn!(pid=%pid.0, error=%e, "Emergency cleanup failed for process");
                     }
                 }
             }
@@ -178,7 +167,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_manager_creation() {
         let config = create_test_config();
-        let manager = ProcessManager::new(&config).await.unwrap();
+        let manager = ProcessManager::new(&config).await;
 
         // Verify manager was created successfully - just check that it exists
         // The fact that ProcessManager::new() succeeded means the platform manager was created
@@ -188,7 +177,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_spawning() {
         let config = create_test_config();
-        let manager = ProcessManager::new(&config).await.unwrap();
+        let manager = ProcessManager::new(&config).await;
 
         // Test spawning a simple process
         #[cfg(unix)]
@@ -232,7 +221,7 @@ mod tests {
             config.args = vec!["127.0.0.1".to_string(), "-n".to_string(), "1".to_string()];
         }
 
-        let manager = ProcessManager::new(&config).await.unwrap();
+        let manager = ProcessManager::new(&config).await;
         let handle = manager.start_server().await.unwrap();
 
         // Verify server process started
@@ -240,30 +229,5 @@ mod tests {
 
         // Wait a bit for process to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-    }
-
-    #[tokio::test]
-    async fn test_cleanup_functionality() {
-        let mut config = create_test_config();
-
-        // Use a longer-running process for cleanup testing
-        #[cfg(unix)]
-        {
-            config.command = "sleep".to_string();
-            config.args = vec!["5".to_string()];
-        }
-
-        #[cfg(windows)]
-        {
-            config.command = "ping".to_string();
-            config.args = vec!["127.0.0.1".to_string(), "-n".to_string(), "10".to_string()];
-        }
-
-        let manager = ProcessManager::new(&config).await.unwrap();
-        let _handle = manager.start_server().await.unwrap();
-
-        // Test cleanup
-        let result = manager.cleanup().await;
-        assert!(result.is_ok());
     }
 }

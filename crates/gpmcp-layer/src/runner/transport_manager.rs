@@ -1,8 +1,13 @@
+use crate::error::GpmcpError;
 use crate::{RunnerConfig, Transport};
-use anyhow::{Context, Result};
+use anyhow::Result;
+use backon::{BackoffBuilder, ExponentialBuilder, Retryable};
+use rmcp::ServiceExt;
+use rmcp::model::ClientInfo;
 use rmcp::transport::{SseClientTransport, TokioChildProcess};
+use std::time::Duration;
 use tokio::process::Command;
-use tracing::{info, warn};
+use tracing::info;
 
 /// TransportManager handles the creation and management of different transport types
 pub struct TransportManager {
@@ -16,14 +21,14 @@ pub enum TransportVariant {
 
 impl TransportManager {
     /// Creates a new TransportManager
-    pub async fn new(runner_config: &RunnerConfig) -> Result<Self> {
+    pub async fn new(runner_config: &RunnerConfig) -> Result<Self, GpmcpError> {
         let transport = match &runner_config.transport {
             Transport::Stdio => {
                 info!("Creating stdio transport");
                 Self::create_stdio_transport(runner_config.clone()).await?
             }
             Transport::Sse { url } => {
-                info!("Creating SSE transport for URL: {}", url);
+                info!(url=%url, "Creating SSE transport for URL");
                 Self::create_sse_transport(url).await?
             }
         };
@@ -32,7 +37,9 @@ impl TransportManager {
     }
 
     /// Creates a stdio transport using TokioChildProcess
-    async fn create_stdio_transport(runner_config: RunnerConfig) -> Result<TransportVariant> {
+    async fn create_stdio_transport(
+        runner_config: RunnerConfig,
+    ) -> Result<TransportVariant, GpmcpError> {
         // Create the command
         let mut cmd = Command::new(&runner_config.command);
         cmd.args(&runner_config.args);
@@ -47,26 +54,14 @@ impl TransportManager {
             cmd.env(key, value);
         }
 
-        // Try to get PID information before creating transport
-        info!(
-            "Creating STDIO transport for command: {} with args: {:?}",
-            runner_config.command, runner_config.args
-        );
+        let transport = TokioChildProcess::new(cmd)?;
 
-        let transport =
-            TokioChildProcess::new(cmd).context("Failed to create TokioChildProcess")?;
-
-        // Note: TokioChildProcess doesn't expose PID directly
-        warn!(
-            "STDIO transport created for command: {} - PID not accessible through TokioChildProcess interface",
-            runner_config.command
-        );
-
+        info!("Stdio transport created successfully");
         Ok(TransportVariant::Stdio(transport))
     }
 
     /// Creates an SSE transport with server readiness polling
-    async fn create_sse_transport(url: impl ToString) -> Result<TransportVariant> {
+    async fn create_sse_transport(url: impl ToString) -> Result<TransportVariant, GpmcpError> {
         let url_string = url.to_string();
 
         // Poll the server to check if it's ready using list_tools request
@@ -74,53 +69,36 @@ impl TransportManager {
         Self::poll_server_readiness(&url_string, 10, 1000).await?;
 
         // Create SSE transport
-        let transport = SseClientTransport::start(url_string)
-            .await
-            .context("Failed to create SSE transport")?;
+        // TODO: Add varient in GpmcpError and use that.
+        let transport = SseClientTransport::start(url_string).await?;
 
+        info!("SSE transport created successfully");
         Ok(TransportVariant::Sse(transport))
     }
 
     /// Poll the server readiness by attempting to connect and call list_tools
-    async fn poll_server_readiness(url: &str, max_attempts: u32, interval_ms: u64) -> Result<()> {
-        info!(
-            "Polling server readiness at {} (max {} attempts, {}ms interval)",
-            url, max_attempts, interval_ms
-        );
+    async fn poll_server_readiness(
+        url: &str,
+        max_attempts: u32,
+        interval_ms: u64,
+    ) -> Result<(), GpmcpError> {
+        info!(url=%url, max_attempts=?max_attempts, interval_ms=?interval_ms, "Polling server readiness");
 
-        for attempt in 1..=max_attempts {
-            // Try to create a temporary transport and test connectivity
-            match Self::test_server_connectivity(url).await {
-                Ok(()) => {
-                    info!("Server is ready after {} attempts", attempt);
-                    return Ok(());
-                }
-                Err(e) => {
-                    if attempt == max_attempts {
-                        return Err(anyhow::anyhow!(
-                            "Server not ready after {} attempts. Last error: {}",
-                            max_attempts,
-                            e
-                        ));
-                    }
-                    // Wait before next attempt
-                    tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
-                }
-            }
-        }
+        let poll = ExponentialBuilder::new()
+            .with_jitter()
+            .with_factor(1.0)
+            .with_max_times(max_attempts as usize)
+            .with_min_delay(Duration::from_millis(interval_ms))
+            .with_max_delay(Duration::from_secs(1))
+            .build();
 
-        Err(anyhow::anyhow!("Server polling failed unexpectedly"))
+        (|| Self::test_server_connectivity(url)).retry(poll).await
     }
 
     /// Test server connectivity by creating a temporary connection and calling list_tools
-    async fn test_server_connectivity(url: &str) -> Result<()> {
-        use rmcp::ServiceExt;
-        use rmcp::model::ClientInfo;
-
+    async fn test_server_connectivity(url: &str) -> Result<(), GpmcpError> {
         // Create a temporary SSE transport for testing
-        let test_transport = SseClientTransport::start(url.to_string())
-            .await
-            .context("Failed to create test SSE transport")?;
+        let test_transport = SseClientTransport::start(url.to_string()).await?;
 
         // Create minimal client info for testing
         let client_info = ClientInfo {
@@ -133,23 +111,15 @@ impl TransportManager {
         };
 
         // Try to establish service and call list_tools
-        let service = client_info
-            .serve(test_transport)
-            .await
-            .context("Failed to create test service")?;
+        let service = client_info.serve(test_transport).await?;
 
         // Call list_tools to verify server is responding
-        let _result = service
-            .list_tools(Default::default())
-            .await
-            .context("Server not responding to list_tools")?;
+        let _result = service.list_tools(Default::default()).await?;
 
         // Cancel the test service
-        service
-            .cancel()
-            .await
-            .context("Failed to cancel test service")?;
+        service.cancel().await?;
 
+        info!("Server is ready and responding to list_tools request");
         Ok(())
     }
 
