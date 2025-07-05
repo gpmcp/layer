@@ -1,7 +1,6 @@
 use crate::runner::{GpmcpRunnerInner, Initialized, Uninitialized};
-use crate::{GpmcpError, RunnerConfig};
+use crate::{GpmcpError, RetryConfig, RunnerConfig};
 use backon::{ExponentialBuilder, Retryable};
-use gpmcp_layer_core::RetryConfig;
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
