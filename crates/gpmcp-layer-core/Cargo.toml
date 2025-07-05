@@ -11,3 +11,18 @@ async-trait = "0.1"
 thiserror = "2.0.12"
 derive_builder = "0.20.2"
 tokio = { version = "1.45.1", features = ["time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+rmcp = { git = "https://github.com/gpmcp/rust-sdk", rev = "b9d7d61ebd6e8385cbc4aa105d4e25774fc1a59c", features = [
+    "client",
+    "transport-sse-client",
+    "reqwest",
+    "transport-streamable-http-client",
+    "transport-child-process",
+    "server",
+    "transport-sse-server",
+    "transport-streamable-http-server",
+] }
+tokio-util = "0.7.15"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+backon = "1.2"

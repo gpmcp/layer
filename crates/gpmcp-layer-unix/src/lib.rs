@@ -1,6 +1,8 @@
 mod unix_process_manager;
+mod runner_process_manager;
 
 pub use unix_process_manager::{UnixProcessHandle, UnixProcessManager};
+pub use runner_process_manager::{UnixRunnerProcessManager, UnixRunnerProcessManagerFactory};
 
 pub struct UnixProcessManagerFactory;
 
