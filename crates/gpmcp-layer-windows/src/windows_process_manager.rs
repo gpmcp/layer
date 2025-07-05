@@ -5,8 +5,7 @@ use std::time::Duration;
 use sysinfo::System;
 use tokio::process::{Child, Command};
 use tracing::{info, warn};
-
-use gpmcp_layer_core::*;
+use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus, ProcessTermination, TerminationResult};
 
 /// Windows-specific process handle implementation
 pub struct WindowsProcessHandle {

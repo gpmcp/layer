@@ -1,12 +1,10 @@
-use crate::GpmcpError;
-use crate::RunnerConfig;
-// Note: Platform factory is now in the main gpmcp-layer crate
-// use crate::runner::platform_runner_factory::create_runner_process_manager;
-use crate::RunnerProcessManager;
+use crate::config::{RunnerConfig, Transport};
+use crate::error::GpmcpError;
+use crate::process_manager_trait::RunnerProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -36,12 +34,25 @@ impl GpmcpRunnerInner<Uninitialized> {
     }
     pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> {
         // Default implementation - will be deprecated once main crate provides factory
-        unimplemented!("Use connect_with_factory instead - process manager creation moved to main crate")
+        unimplemented!(
+            "Use connect_with_factory instead - process manager creation moved to main crate"
+        )
     }
 
-    pub async fn connect_with_factory<F>(&self, factory_fn: F) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> 
+    pub async fn connect_with_factory<F>(
+        &self,
+        factory_fn: F,
+    ) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError>
     where
-        F: FnOnce(&RunnerConfig) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn RunnerProcessManager>, anyhow::Error>> + Send>>,
+        F: FnOnce(
+            &RunnerConfig,
+        ) -> Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<Box<dyn RunnerProcessManager>, anyhow::Error>,
+                    > + Send,
+            >,
+        >,
     {
         info!(
             "Creating GpmcpRunner for server: {}",
@@ -51,14 +62,12 @@ impl GpmcpRunnerInner<Uninitialized> {
         // Determine transport type and create appropriate managers
 
         // Create process manager if needed (for commands that need subprocess)
-        let process_manager = factory_fn(&self.runner_config)
-            .await
-            .map_err(|e| {
-                GpmcpError::process_error(format!("Failed to create process manager: {e}"))
-            })?;
+        let process_manager = factory_fn(&self.runner_config).await.map_err(|e| {
+            GpmcpError::process_error(format!("Failed to create process manager: {e}"))
+        })?;
 
         // For SSE transport, start the server process first
-        if matches!(self.runner_config.transport, crate::Transport::Sse { .. }) {
+        if matches!(self.runner_config.transport, Transport::Sse { .. }) {
             info!("Starting server process for SSE transport");
             let _handle = process_manager
                 .start_server()

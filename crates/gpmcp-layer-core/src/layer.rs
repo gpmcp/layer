@@ -1,5 +1,6 @@
-use crate::runner::{GpmcpRunnerInner, Initialized, Uninitialized};
-use crate::{GpmcpError, RetryConfig, RunnerConfig};
+use crate::config::{RetryConfig, RunnerConfig};
+use crate::error::GpmcpError;
+use crate::runner::inner::{GpmcpRunnerInner, Initialized, Uninitialized};
 use backon::{ExponentialBuilder, Retryable};
 use std::future::Future;
 use std::sync::Arc;

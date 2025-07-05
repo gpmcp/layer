@@ -1,14 +1,14 @@
-mod unix_process_manager;
 mod runner_process_manager;
+mod unix_process_manager;
 
-pub use unix_process_manager::{UnixProcessHandle, UnixProcessManager};
+use gpmcp_layer_core::process::{ProcessManager, ProcessManagerFactory};
 pub use runner_process_manager::{UnixRunnerProcessManager, UnixRunnerProcessManagerFactory};
+pub use unix_process_manager::{UnixProcessHandle, UnixProcessManager};
 
 pub struct UnixProcessManagerFactory;
 
-impl gpmcp_layer_core::ProcessManagerFactory for UnixProcessManagerFactory {
-    fn create_process_manager() -> Box<dyn gpmcp_layer_core::ProcessManager> {
-        use gpmcp_layer_core::ProcessManager;
+impl ProcessManagerFactory for UnixProcessManagerFactory {
+    fn create_process_manager() -> Box<dyn ProcessManager> {
         Box::new(UnixProcessManager::new())
     }
 
