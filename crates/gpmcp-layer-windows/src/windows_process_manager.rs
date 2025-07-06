@@ -30,7 +30,8 @@ impl WindowsProcessHandle {
 #[async_trait]
 impl ProcessHandle for WindowsProcessHandle {
     fn get_pid(&self) -> Option<ProcessId> {
-        self.child.id()}
+        self.child.id()
+    }
 
     fn get_command(&self) -> &str {
         &self.command

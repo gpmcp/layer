@@ -36,7 +36,8 @@ mod unix_impl {
     #[async_trait]
     impl ProcessHandle for UnixProcessHandle {
         fn get_pid(&self) -> Option<ProcessId> {
-            self.child.id()}
+            self.child.id()
+        }
 
         fn get_command(&self) -> &str {
             &self.command
