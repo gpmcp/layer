@@ -180,14 +180,13 @@ impl RunnerConfigBuilder {
     }
 
     fn validate_working_directory(&self) -> Result<(), String> {
-        if let Some(path) = self.working_directory.as_ref().and_then(|p| p.as_ref()) {
-            if path.is_file() {
+        if let Some(path) = self.working_directory.as_ref().and_then(|p| p.as_ref())
+            && path.is_file() {
                 return Err(format!(
                     "Expected directory found a file: {}",
                     path.display()
                 ));
             }
-        }
         Ok(())
     }
 }
