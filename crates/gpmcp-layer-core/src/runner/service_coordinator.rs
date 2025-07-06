@@ -1,4 +1,4 @@
-use crate::RunnerConfig;
+use crate::config::RunnerConfig;
 use crate::runner::transport_manager::TransportManager;
 use anyhow::{Context, Result};
 use rmcp::model::{ClientInfo, InitializeRequestParam};

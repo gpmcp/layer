@@ -1,16 +1,20 @@
 //! Windows-specific process management implementation
 
+mod runner_process_manager;
 mod windows_process_manager;
 
+use gpmcp_layer_core::process::{ProcessManager, ProcessManagerFactory};
+pub use runner_process_manager::{WindowsRunnerProcessManager, WindowsRunnerProcessManagerFactory};
 pub use windows_process_manager::WindowsProcessManager;
 
 /// Windows-specific process manager factory
 pub struct WindowsProcessManagerFactory;
 
-impl gpmcp_layer_core::ProcessManagerFactory for WindowsProcessManagerFactory {
-    fn create_process_manager() -> Box<dyn gpmcp_layer_core::ProcessManager> {
-        use gpmcp_layer_core::ProcessManager;
-        Box::new(WindowsProcessManager::new())
+impl ProcessManagerFactory for WindowsProcessManagerFactory {
+    type Manager = WindowsProcessManager;
+
+    fn create_process_manager() -> Self::Manager {
+        WindowsProcessManager::new()
     }
 
     fn platform_name() -> &'static str {

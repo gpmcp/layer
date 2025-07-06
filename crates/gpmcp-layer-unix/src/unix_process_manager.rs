@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use gpmcp_layer_core::{
+use gpmcp_layer_core::process::{
     ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus,
     ProcessTermination, TerminationResult,
 };
@@ -36,7 +36,7 @@ mod unix_impl {
     #[async_trait]
     impl ProcessHandle for UnixProcessHandle {
         fn get_pid(&self) -> Option<ProcessId> {
-            self.child.id().map(ProcessId::from)
+            self.child.id()
         }
 
         fn get_command(&self) -> &str {
@@ -49,7 +49,7 @@ mod unix_impl {
 
         async fn is_running(&self) -> bool {
             if let Some(pid) = self.get_pid() {
-                let nix_pid = NixPid::from_raw(pid.0 as i32);
+                let nix_pid = NixPid::from_raw(pid as i32);
                 // Send signal 0 to check if process exists
                 signal::kill(nix_pid, None).is_ok()
             } else {
@@ -90,13 +90,15 @@ mod unix_impl {
 
     #[async_trait]
     impl ProcessLifecycle for UnixProcessManager {
+        type Handle = UnixProcessHandle;
+
         async fn spawn_process(
             &self,
             command: &str,
             args: &[String],
             working_dir: Option<&str>,
             env: &HashMap<String, String>,
-        ) -> Result<Box<dyn ProcessHandle>> {
+        ) -> Result<Self::Handle> {
             let mut cmd = Command::new(command);
             cmd.args(args);
 
@@ -125,11 +127,11 @@ mod unix_impl {
                 );
             }
 
-            Ok(Box::new(UnixProcessHandle::new(
+            Ok(UnixProcessHandle::new(
                 child,
                 command.to_string(),
                 args.to_vec(),
-            )))
+            ))
         }
 
         async fn is_process_healthy(&self, handle: &dyn ProcessHandle) -> bool {
@@ -173,23 +175,23 @@ mod unix_impl {
     impl ProcessTermination for UnixProcessManager {
         async fn terminate_gracefully(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
             if let Some(pid) = handle.get_pid() {
-                let nix_pid = NixPid::from_raw(pid.0 as i32);
+                let nix_pid = NixPid::from_raw(pid as i32);
 
                 match signal::kill(nix_pid, Signal::SIGTERM) {
                     Ok(()) => {
-                        info!("Sent SIGTERM to process {}", pid.0);
+                        info!("Sent SIGTERM to process {}", pid);
                         TerminationResult::Success
                     }
                     Err(nix::errno::Errno::ESRCH) => {
-                        info!("Process {} not found (already terminated)", pid.0);
+                        info!("Process {} not found (already terminated)", pid);
                         TerminationResult::ProcessNotFound
                     }
                     Err(nix::errno::Errno::EPERM) => {
-                        warn!("Permission denied to terminate process {}", pid.0);
+                        warn!("Permission denied to terminate process {}", pid);
                         TerminationResult::AccessDenied
                     }
                     Err(e) => {
-                        warn!("Failed to send SIGTERM to process {}: {}", pid.0, e);
+                        warn!("Failed to send SIGTERM to process {}: {}", pid, e);
                         TerminationResult::Failed(format!("SIGTERM failed: {e}"))
                     }
                 }
@@ -200,11 +202,11 @@ mod unix_impl {
 
         async fn force_kill(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
             if let Some(pid) = handle.get_pid() {
-                let nix_pid = NixPid::from_raw(pid.0 as i32);
+                let nix_pid = NixPid::from_raw(pid as i32);
 
                 match signal::kill(nix_pid, Signal::SIGKILL) {
                     Ok(()) => {
-                        info!("Sent SIGKILL to process {}", pid.0);
+                        info!("Sent SIGKILL to process {}", pid);
                         // Also call handle's kill method for cleanup
                         if let Err(e) = handle.kill().await {
                             warn!("Handle kill cleanup failed: {}", e);
@@ -212,15 +214,15 @@ mod unix_impl {
                         TerminationResult::Success
                     }
                     Err(nix::errno::Errno::ESRCH) => {
-                        info!("Process {} not found (already terminated)", pid.0);
+                        info!("Process {} not found (already terminated)", pid);
                         TerminationResult::ProcessNotFound
                     }
                     Err(nix::errno::Errno::EPERM) => {
-                        warn!("Permission denied to kill process {}", pid.0);
+                        warn!("Permission denied to kill process {}", pid);
                         TerminationResult::AccessDenied
                     }
                     Err(e) => {
-                        warn!("Failed to send SIGKILL to process {}: {}", pid.0, e);
+                        warn!("Failed to send SIGKILL to process {}: {}", pid, e);
                         TerminationResult::Failed(format!("SIGKILL failed: {e}"))
                     }
                 }
@@ -238,28 +240,25 @@ mod unix_impl {
             );
 
             let mut children = Vec::new();
-            Self::find_children_recursive(&system, parent_pid.0, &mut children);
+            Self::find_children_recursive(&system, parent_pid, &mut children);
 
-            Ok(children.into_iter().map(ProcessId::from).collect())
+            Ok(children.into_iter().collect())
         }
 
         async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {
-            info!("Terminating process tree for root PID {}", root_pid.0);
+            info!("Terminating process tree for root PID {}", root_pid);
 
             // Find all child processes
             let children = match self.find_child_processes(root_pid).await {
                 Ok(children) => children,
                 Err(e) => {
-                    warn!(
-                        "Failed to find child processes for PID {}: {}",
-                        root_pid.0, e
-                    );
+                    warn!("Failed to find child processes for PID {}: {}", root_pid, e);
                     return TerminationResult::Failed(format!("Failed to enumerate children: {e}"));
                 }
             };
 
             if children.is_empty() {
-                info!("No child processes found for PID {}", root_pid.0);
+                info!("No child processes found for PID {}", root_pid);
             } else {
                 info!("Found {} child processes to terminate", children.len());
 
@@ -270,7 +269,7 @@ mod unix_impl {
                         result => {
                             warn!(
                                 "Failed to terminate child process {}: {:?}",
-                                child_pid.0, result
+                                child_pid, result
                             );
                         }
                     }
@@ -282,12 +281,12 @@ mod unix_impl {
         }
 
         async fn terminate_process_group(&self, pid: ProcessId) -> TerminationResult {
-            let pgid = NixPid::from_raw(pid.0 as i32);
+            let pgid = NixPid::from_raw(pid as i32);
 
             // Try SIGTERM first for graceful shutdown
             match signal::killpg(pgid, Signal::SIGTERM) {
                 Ok(()) => {
-                    info!("Sent SIGTERM to process group {}", pid.0);
+                    info!("Sent SIGTERM to process group {}", pid);
 
                     // Wait for graceful shutdown
                     tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -295,15 +294,15 @@ mod unix_impl {
                     // Check if processes are still running, if so use SIGKILL
                     match signal::killpg(pgid, Signal::SIGKILL) {
                         Ok(()) => {
-                            info!("Sent SIGKILL to process group {}", pid.0);
+                            info!("Sent SIGKILL to process group {}", pid);
                             TerminationResult::Success
                         }
                         Err(nix::errno::Errno::ESRCH) => {
-                            info!("Process group {} already terminated", pid.0);
+                            info!("Process group {} already terminated", pid);
                             TerminationResult::Success
                         }
                         Err(e) => {
-                            warn!("Failed to send SIGKILL to process group {}: {}", pid.0, e);
+                            warn!("Failed to send SIGKILL to process group {}: {}", pid, e);
                             TerminationResult::Failed(format!(
                                 "SIGKILL to process group failed: {e}"
                             ))
@@ -311,15 +310,15 @@ mod unix_impl {
                     }
                 }
                 Err(nix::errno::Errno::ESRCH) => {
-                    info!("Process group {} not found (already terminated)", pid.0);
+                    info!("Process group {} not found (already terminated)", pid);
                     TerminationResult::Success
                 }
                 Err(nix::errno::Errno::EPERM) => {
-                    warn!("Permission denied to terminate process group {}", pid.0);
+                    warn!("Permission denied to terminate process group {}", pid);
                     TerminationResult::AccessDenied
                 }
                 Err(e) => {
-                    warn!("Failed to send SIGTERM to process group {}: {}", pid.0, e);
+                    warn!("Failed to send SIGTERM to process group {}: {}", pid, e);
                     TerminationResult::Failed(format!("SIGTERM to process group failed: {e}"))
                 }
             }
@@ -329,12 +328,12 @@ mod unix_impl {
     impl UnixProcessManager {
         /// Terminate a single process by PID with escalation
         async fn terminate_single_process(&self, pid: ProcessId) -> TerminationResult {
-            let nix_pid = NixPid::from_raw(pid.0 as i32);
+            let nix_pid = NixPid::from_raw(pid as i32);
 
             // Try SIGTERM first
             match signal::kill(nix_pid, Signal::SIGTERM) {
                 Ok(()) => {
-                    info!("Sent SIGTERM to process {}", pid.0);
+                    info!("Sent SIGTERM to process {}", pid);
 
                     // Wait briefly for graceful shutdown
                     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -342,29 +341,29 @@ mod unix_impl {
                     // Then SIGKILL if still running
                     match signal::kill(nix_pid, Signal::SIGKILL) {
                         Ok(()) => {
-                            info!("Sent SIGKILL to process {}", pid.0);
+                            info!("Sent SIGKILL to process {}", pid);
                             TerminationResult::Success
                         }
                         Err(nix::errno::Errno::ESRCH) => {
-                            info!("Process {} already terminated", pid.0);
+                            info!("Process {} already terminated", pid);
                             TerminationResult::Success
                         }
                         Err(e) => {
-                            warn!("Failed to kill process {}: {}", pid.0, e);
+                            warn!("Failed to kill process {}: {}", pid, e);
                             TerminationResult::Failed(format!("SIGKILL failed: {e}"))
                         }
                     }
                 }
                 Err(nix::errno::Errno::ESRCH) => {
-                    info!("Process {} not found (already terminated)", pid.0);
+                    info!("Process {} not found (already terminated)", pid);
                     TerminationResult::Success
                 }
                 Err(nix::errno::Errno::EPERM) => {
-                    warn!("Permission denied to terminate process {}", pid.0);
+                    warn!("Permission denied to terminate process {}", pid);
                     TerminationResult::AccessDenied
                 }
                 Err(e) => {
-                    warn!("Failed to send SIGTERM to process {}: {e}", pid.0,);
+                    warn!("Failed to send SIGTERM to process {}: {e}", pid,);
                     TerminationResult::Failed(format!("SIGTERM failed: {e}",))
                 }
             }

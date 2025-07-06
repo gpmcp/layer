@@ -1,31 +1,38 @@
-use crate::runner::{GpmcpRunnerInner, Initialized, Uninitialized};
-use crate::{GpmcpError, RunnerConfig};
+use crate::config::{RetryConfig, RunnerConfig};
+use crate::error::GpmcpError;
+use crate::process_manager_trait::DynRunnerProcessManager;
+use crate::runner::inner::GpmcpRunnerInner;
 use backon::{ExponentialBuilder, Retryable};
-use gpmcp_layer_core::RetryConfig;
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::sync::Mutex;
 
+pub struct Initialized;
+
+pub struct Uninitialized;
+
 #[derive(Clone)]
 pub struct GpmcpLayer<Status> {
     runner_config: RunnerConfig,
+    process_manager: Arc<dyn DynRunnerProcessManager>,
     inner: Arc<Mutex<GpmcpRunnerInner<Status>>>,
     retry_config: ExponentialBuilder,
 }
 impl GpmcpLayer<Uninitialized> {
-    pub fn new(runner_config: RunnerConfig) -> Result<Self, GpmcpError> {
-        // Validate retry config at construction time
-        runner_config
-            .retry_config
-            .validate()
-            .map_err(|e| GpmcpError::ConfigurationError(format!("Invalid retry config: {e}")))?;
-
-        Ok(Self {
-            inner: Arc::new(Mutex::new(GpmcpRunnerInner::new(runner_config.clone()))),
+    pub fn new(
+        runner_config: RunnerConfig,
+        process_manager: Arc<dyn DynRunnerProcessManager>,
+    ) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(GpmcpRunnerInner::new(
+                runner_config.clone(),
+                process_manager.clone(),
+            ))),
             retry_config: Self::create_retry_strategy(&runner_config.retry_config),
             runner_config,
-        })
+            process_manager,
+        }
     }
     pub async fn connect(self) -> Result<GpmcpLayer<Initialized>, GpmcpError> {
         let initialized_inner = self.inner.lock().await.connect().await?;
@@ -33,6 +40,7 @@ impl GpmcpLayer<Uninitialized> {
             runner_config: self.runner_config,
             retry_config: self.retry_config,
             inner: Arc::new(Mutex::new(initialized_inner)),
+            process_manager: self.process_manager,
         })
     }
     /// Creates a configured retry strategy based on the current retry configuration
@@ -63,7 +71,8 @@ impl GpmcpLayer<Initialized> {
         // Create the operation closure that handles connection management
         let operation_with_connection = || async {
             if is_retry.load(std::sync::atomic::Ordering::Relaxed) {
-                let new = GpmcpRunnerInner::new(self.runner_config.clone());
+                let new =
+                    GpmcpRunnerInner::new(self.runner_config.clone(), self.process_manager.clone());
                 *self.inner.lock().await = new.connect().await?;
             }
             operation().await

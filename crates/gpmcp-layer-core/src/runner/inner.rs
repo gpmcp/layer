@@ -1,6 +1,7 @@
-use crate::GpmcpError;
-use crate::RunnerConfig;
-use crate::runner::process_manager::ProcessManager;
+use crate::config::{RunnerConfig, Transport};
+use crate::error::GpmcpError;
+use crate::layer::{Initialized, Uninitialized};
+use crate::process_manager_trait::DynRunnerProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;
 use std::sync::Arc;
@@ -8,29 +9,29 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
-pub struct Initialized;
-
-pub struct Uninitialized;
-
 #[derive(Clone)]
 pub struct GpmcpRunnerInner<Status> {
     cancellation_token: Arc<CancellationToken>,
     runner_config: RunnerConfig,
     service_coordinator: Arc<RwLock<Option<ServiceCoordinator>>>,
-    process_manager: Arc<RwLock<Option<ProcessManager>>>,
+    process_manager: Arc<dyn DynRunnerProcessManager>,
     _status: std::marker::PhantomData<Status>,
 }
 
 impl GpmcpRunnerInner<Uninitialized> {
-    pub fn new(runner_config: RunnerConfig) -> Self {
+    pub fn new(
+        runner_config: RunnerConfig,
+        process_manager: Arc<dyn DynRunnerProcessManager>,
+    ) -> Self {
         Self {
             cancellation_token: Arc::new(CancellationToken::new()),
             runner_config,
             service_coordinator: Arc::new(RwLock::new(None)),
-            process_manager: Arc::new(RwLock::new(None)),
+            process_manager,
             _status: Default::default(),
         }
     }
+
     pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> {
         info!(
             "Creating GpmcpRunner for server: {}",
@@ -39,20 +40,13 @@ impl GpmcpRunnerInner<Uninitialized> {
 
         // Determine transport type and create appropriate managers
 
-        // Create process manager if needed (for commands that need subprocess)
-        let process_manager = ProcessManager::new(&self.runner_config)
-            .await
-            .map_err(|e| {
-                GpmcpError::process_error(format!("Failed to create process manager: {e}"))
-            })?;
-
         // For SSE transport, start the server process first
-        if matches!(self.runner_config.transport, crate::Transport::Sse { .. }) {
+        if matches!(self.runner_config.transport, Transport::Sse { .. }) {
             info!("Starting server process for SSE transport");
-            let _handle = process_manager
-                .start_server()
-                .await
-                .map_err(|e| GpmcpError::process_error(format!("Failed to start server: {e}")))?;
+            let _handle =
+                self.process_manager.start_server().await.map_err(|e| {
+                    GpmcpError::process_error(format!("Failed to start server: {e}"))
+                })?;
         }
 
         // Create transport manager
@@ -73,7 +67,6 @@ impl GpmcpRunnerInner<Uninitialized> {
             .write()
             .await
             .replace(service_coordinator);
-        self.process_manager.write().await.replace(process_manager);
 
         Ok(GpmcpRunnerInner {
             cancellation_token: self.cancellation_token.clone(),
@@ -194,12 +187,10 @@ impl GpmcpRunnerInner<Initialized> {
             })?;
         }
 
-        // Then cleanup process if exists
-        if let Some(manager) = process_manager.write().await.take() {
-            manager.cleanup().await.map_err(|e| {
-                GpmcpError::process_error(format!("Failed to cleanup process: {e}"))
-            })?;
-        }
+        process_manager
+            .cleanup()
+            .await
+            .map_err(|e| GpmcpError::process_error(format!("Failed to cleanup process: {e}")))?;
 
         info!("GpmcpRunner cancelled successfully");
         Ok(())

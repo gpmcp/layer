@@ -1,12 +1,9 @@
-//! GPMCP Core - Platform-independent abstractions and configurations
-//!
-//! This crate provides the core traits, configurations, and error types
-//! that are shared across platform-specific implementations.
+pub mod config;
+pub mod error;
+pub mod layer;
+pub mod process;
+pub mod process_manager_trait;
+mod runner;
 
-mod config;
-mod error;
-mod process;
-
-pub use config::*;
-pub use error::*;
-pub use process::*;
+pub use rmcp;
+pub use runner::{service_coordinator, transport_manager};

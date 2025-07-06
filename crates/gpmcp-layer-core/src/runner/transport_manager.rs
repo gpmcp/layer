@@ -1,4 +1,4 @@
-use crate::{RunnerConfig, Transport};
+use crate::config::{RunnerConfig, Transport};
 use anyhow::{Context, Result};
 use rmcp::transport::{SseClientTransport, TokioChildProcess};
 use tokio::process::Command;
