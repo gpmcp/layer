@@ -133,6 +133,7 @@ pub enum Transport {
 /// Main runner configuration
 #[derive(Default, Debug, Clone, PartialEq, Builder)]
 #[builder(setter(into, strip_option))]
+#[builder(build_fn(validate = "Self::validate_working_directory"))]
 pub struct RunnerConfig {
     pub name: String,
     pub version: String,
@@ -176,6 +177,18 @@ impl RunnerConfigBuilder {
             env.insert(key.to_string(), value.to_string());
         }
         self
+    }
+
+    fn validate_working_directory(&self) -> Result<(), String> {
+        if let Some(path) = self.working_directory.as_ref().and_then(|p| p.as_ref()) {
+            if path.is_file() {
+                return Err(format!(
+                    "Expected directory found a file: {}",
+                    path.display()
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
