@@ -1,9 +1,9 @@
+use crate::config::RunnerConfig;
 use crate::runner::transport_manager::TransportManager;
 use anyhow::{Context, Result};
 use rmcp::model::{ClientInfo, InitializeRequestParam};
 use rmcp::{ServiceExt, service::RunningService};
 use tracing::info;
-use crate::config::RunnerConfig;
 
 /// ServiceCoordinator manages the MCP service connection and provides
 /// a unified interface for all MCP operations

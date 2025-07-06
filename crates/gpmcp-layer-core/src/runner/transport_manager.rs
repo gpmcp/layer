@@ -1,8 +1,8 @@
+use crate::config::{RunnerConfig, Transport};
 use anyhow::{Context, Result};
 use rmcp::transport::{SseClientTransport, TokioChildProcess};
 use tokio::process::Command;
 use tracing::{info, warn};
-use crate::config::{RunnerConfig, Transport};
 
 /// TransportManager handles the creation and management of different transport types
 pub struct TransportManager {

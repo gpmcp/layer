@@ -1,11 +1,11 @@
 //! Windows-specific process management implementation
 
-mod windows_process_manager;
 mod runner_process_manager;
+mod windows_process_manager;
 
 use gpmcp_layer_core::process::{ProcessManager, ProcessManagerFactory};
-pub use windows_process_manager::WindowsProcessManager;
 pub use runner_process_manager::{WindowsRunnerProcessManager, WindowsRunnerProcessManagerFactory};
+pub use windows_process_manager::WindowsProcessManager;
 
 /// Windows-specific process manager factory
 pub struct WindowsProcessManagerFactory;

@@ -45,8 +45,7 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
             .runner_config
             .working_directory
             .as_ref()
-            .map(|p| p.as_path().to_str())
-            .flatten();
+            .and_then(|p| p.as_path().to_str());
         let env = &self.runner_config.env;
 
         // Use the platform manager to spawn the server process
@@ -54,12 +53,12 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
             .platform_manager
             .spawn_process(command, args, working_dir, env)
             .await
-            .with_context(|| format!("Failed to start server with command: {}", command))?;
+            .with_context(|| format!("Failed to start server with command: {command}"))?;
 
         // Track the server process
         if let Some(pid) = handle.get_pid() {
             let mut active = self.active_processes.lock().unwrap();
-            active.insert(pid, format!("server:{}", command));
+            active.insert(pid, format!("server:{command}"));
         }
 
         Ok(handle)
@@ -81,7 +80,7 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
             .platform_manager
             .spawn_process(command, args, working_dir, env_map)
             .await
-            .with_context(|| format!("Failed to spawn process: {}", command))?;
+            .with_context(|| format!("Failed to spawn process: {command}"))?;
 
         // Track the process
         if let Some(pid) = handle.get_pid() {

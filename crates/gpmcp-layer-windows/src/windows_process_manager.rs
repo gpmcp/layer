@@ -30,8 +30,7 @@ impl WindowsProcessHandle {
 #[async_trait]
 impl ProcessHandle for WindowsProcessHandle {
     fn get_pid(&self) -> Option<ProcessId> {
-        self.child.id().map(ProcessId::from)
-    }
+        self.child.id()}
 
     fn get_command(&self) -> &str {
         &self.command
@@ -237,7 +236,7 @@ impl ProcessTermination for WindowsProcessManager {
         let mut children = Vec::new();
         Self::find_children_recursive(&system, parent_pid, &mut children);
 
-        Ok(children.into_iter().map(ProcessId::from).collect())
+        Ok(children.into_iter().collect())
     }
 
     async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {

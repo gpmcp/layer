@@ -227,7 +227,8 @@ where
         working_dir: Option<&str>,
         env: Option<&HashMap<String, String>>,
     ) -> Result<Box<dyn ProcessHandle>> {
-        let handle = RunnerProcessManager::spawn_process(self, command, args, working_dir, env).await?;
+        let handle =
+            RunnerProcessManager::spawn_process(self, command, args, working_dir, env).await?;
         Ok(Box::new(handle))
     }
 

@@ -1,5 +1,6 @@
 use crate::config::{RunnerConfig, Transport};
 use crate::error::GpmcpError;
+use crate::layer::{Initialized, Uninitialized};
 use crate::process_manager_trait::DynRunnerProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;
@@ -7,7 +8,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
-use crate::layer::{Initialized, Uninitialized};
 
 #[derive(Clone)]
 pub struct GpmcpRunnerInner<Status> {

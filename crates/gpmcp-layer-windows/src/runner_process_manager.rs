@@ -47,8 +47,7 @@ impl RunnerProcessManager for WindowsRunnerProcessManager {
             .runner_config
             .working_directory
             .as_ref()
-            .map(|p| p.as_path().to_str())
-            .flatten();
+            .and_then(|p| p.as_path().to_str());
         let env = &self.runner_config.env;
 
         // Use the platform manager to spawn the server process
@@ -56,12 +55,12 @@ impl RunnerProcessManager for WindowsRunnerProcessManager {
             .platform_manager
             .spawn_process(command, args, working_dir, env)
             .await
-            .with_context(|| format!("Failed to start server with command: {}", command))?;
+            .with_context(|| format!("Failed to start server with command: {command}"))?;
 
         // Track the server process
         if let Some(pid) = handle.get_pid() {
             let mut active = self.active_processes.lock().unwrap();
-            active.insert(pid, format!("server:{}", command));
+            active.insert(pid, format!("server:{command}"));
         }
 
         Ok(handle)
@@ -83,7 +82,7 @@ impl RunnerProcessManager for WindowsRunnerProcessManager {
             .platform_manager
             .spawn_process(command, args, working_dir, env_map)
             .await
-            .with_context(|| format!("Failed to spawn process: {}", command))?;
+            .with_context(|| format!("Failed to spawn process: {command}"))?;
 
         // Track the process
         if let Some(pid) = handle.get_pid() {
@@ -154,7 +153,7 @@ impl Drop for WindowsRunnerProcessManager {
             for pid in active_processes {
                 // Use taskkill with force flag for emergency cleanup
                 let result = std::process::Command::new("taskkill")
-                    .args(&["/F", "/T", "/PID", &pid.to_string()])
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
                     .output();
 
                 match result {
