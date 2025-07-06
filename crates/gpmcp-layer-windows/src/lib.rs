@@ -11,8 +11,10 @@ pub use runner_process_manager::{WindowsRunnerProcessManager, WindowsRunnerProce
 pub struct WindowsProcessManagerFactory;
 
 impl ProcessManagerFactory for WindowsProcessManagerFactory {
-    fn create_process_manager() -> Box<dyn ProcessManager> {
-        Box::new(WindowsProcessManager::new())
+    type Manager = WindowsProcessManager;
+
+    fn create_process_manager() -> Self::Manager {
+        WindowsProcessManager::new()
     }
 
     fn platform_name() -> &'static str {

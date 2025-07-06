@@ -1,62 +1,87 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use std::collections::HashMap;
 use std::time::Duration;
 
-/// Represents a process identifier
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ProcessId(pub u32);
+/// Unique identifier for a process
+pub type ProcessId = u32;
 
-impl From<u32> for ProcessId {
-    fn from(pid: u32) -> Self {
-        Self(pid)
-    }
-}
-
-impl From<ProcessId> for u32 {
-    fn from(pid: ProcessId) -> Self {
-        pid.0
-    }
-}
-
-/// Represents the status of a process
-#[derive(Debug, Clone)]
+/// Status of a process after termination
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProcessStatus {
+    /// Process is currently running
     Running,
+    /// Process exited normally with the given exit code
+    Success(i32),
+    /// Process exited with status information
     Exited(std::process::ExitStatus),
+    /// Process was terminated by a signal (Unix) or forcibly terminated (Windows)
     Terminated,
+    /// Process failed to start or encountered an error
+    Failed(String),
+    /// Process status is unknown
     Unknown,
+}
+
+/// Result of a process termination operation
+#[derive(Debug, Clone, PartialEq)]
+pub enum TerminationResult {
+    /// Process was successfully terminated
+    Success,
+    /// Process was not found (already exited)
+    ProcessNotFound,
+    /// Permission denied (insufficient privileges)
+    PermissionDenied,
+    /// Access denied (same as PermissionDenied, for backward compatibility)
+    AccessDenied,
+    /// Operation timed out
+    Timeout,
+    /// Other error occurred
+    Error(String),
+    /// Operation failed with specific error message
+    Failed(String),
 }
 
 /// Information about a running process
 #[derive(Debug, Clone)]
 pub struct ProcessInfo {
     pub pid: ProcessId,
-    pub status: ProcessStatus,
     pub command: String,
     pub args: Vec<String>,
+    pub status: ProcessStatus,
 }
 
-/// Result of a termination attempt
-#[derive(Debug, Clone)]
-pub enum TerminationResult {
-    Success,
-    ProcessNotFound,
-    AccessDenied,
+/// Error types for process operations
+#[derive(Debug, thiserror::Error)]
+pub enum ProcessError {
+    #[error("Failed to spawn process: {0}")]
+    SpawnFailed(String),
+    #[error("Process not found: {0}")]
+    ProcessNotFound(ProcessId),
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
+    #[error("Operation timed out")]
     Timeout,
-    Failed(String),
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Other error: {0}")]
+    Other(String),
 }
 
-/// Core trait for process lifecycle management
+/// Core trait for process lifecycle management with associated types for better performance
 #[async_trait]
 pub trait ProcessLifecycle: Send + Sync {
+    /// The type of process handle this lifecycle manager produces
+    type Handle: ProcessHandle;
+
     /// Spawn a new process with the given command and arguments
     async fn spawn_process(
         &self,
         command: &str,
         args: &[String],
         working_dir: Option<&str>,
-        env: &std::collections::HashMap<String, String>,
-    ) -> Result<Box<dyn ProcessHandle>>;
+        env: &HashMap<String, String>,
+    ) -> Result<Self::Handle>;
 
     /// Check if a process is still running and healthy
     async fn is_process_healthy(&self, handle: &dyn ProcessHandle) -> bool;
@@ -177,9 +202,44 @@ pub trait ProcessManager: ProcessLifecycle + ProcessTermination {
 
 /// Factory trait for creating platform-specific process managers
 pub trait ProcessManagerFactory {
+    /// The type of process manager this factory creates
+    type Manager: ProcessManager;
+
     /// Create a process manager for the current platform
-    fn create_process_manager() -> Box<dyn ProcessManager>;
+    fn create_process_manager() -> Self::Manager;
 
     /// Get the platform name for logging and debugging
     fn platform_name() -> &'static str;
+}
+
+/// Implementation of ProcessHandle for boxed trait objects to enable associated type usage
+#[async_trait]
+impl ProcessHandle for Box<dyn ProcessHandle> {
+    fn get_pid(&self) -> Option<ProcessId> {
+        (**self).get_pid()
+    }
+
+    fn get_command(&self) -> &str {
+        (**self).get_command()
+    }
+
+    fn get_args(&self) -> &[String] {
+        (**self).get_args()
+    }
+
+    async fn is_running(&self) -> bool {
+        (**self).is_running().await
+    }
+
+    async fn try_wait(&mut self) -> Result<Option<ProcessStatus>> {
+        (**self).try_wait().await
+    }
+
+    async fn wait(&mut self) -> Result<ProcessStatus> {
+        (**self).wait().await
+    }
+
+    async fn kill(&mut self) -> Result<()> {
+        (**self).kill().await
+    }
 }

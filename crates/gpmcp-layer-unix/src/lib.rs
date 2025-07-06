@@ -8,8 +8,10 @@ pub use unix_process_manager::{UnixProcessHandle, UnixProcessManager};
 pub struct UnixProcessManagerFactory;
 
 impl ProcessManagerFactory for UnixProcessManagerFactory {
-    fn create_process_manager() -> Box<dyn ProcessManager> {
-        Box::new(UnixProcessManager::new())
+    type Manager = UnixProcessManager;
+
+    fn create_process_manager() -> Self::Manager {
+        UnixProcessManager::new()
     }
 
     fn platform_name() -> &'static str {

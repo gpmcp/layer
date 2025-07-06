@@ -56,6 +56,9 @@ use crate::process::{ProcessHandle, ProcessId};
 /// ```
 #[async_trait]
 pub trait RunnerProcessManager: Send + Sync {
+    /// The type of process handle returned by this process manager
+    type Handle: ProcessHandle;
+
     /// Create a new process manager instance with the given configuration
     ///
     /// The configuration will be used for server startup operations and should be
@@ -68,7 +71,7 @@ pub trait RunnerProcessManager: Send + Sync {
     /// # Returns
     ///
     /// Returns a new instance of the process manager or an error if initialization fails.
-    async fn new(runner_config: &RunnerConfig) -> Result<Self>
+    fn new(runner_config: &RunnerConfig) -> Self
     where
         Self: Sized;
 
@@ -88,7 +91,7 @@ pub trait RunnerProcessManager: Send + Sync {
     /// // let server_handle = manager.start_server().await?;
     /// // println!("Server started with PID: {:?}", server_handle.get_pid());
     /// ```
-    async fn start_server(&self) -> Result<Box<dyn ProcessHandle>>;
+    async fn start_server(&self) -> Result<Self::Handle>;
 
     /// Spawn a new process with the given parameters and track it for cleanup
     ///
@@ -123,7 +126,7 @@ pub trait RunnerProcessManager: Send + Sync {
         args: &[String],
         working_dir: Option<&str>,
         env: Option<&HashMap<String, String>>,
-    ) -> Result<Box<dyn ProcessHandle>>;
+    ) -> Result<Self::Handle>;
 
     /// Cleanup all tracked processes and release resources
     ///
@@ -175,6 +178,72 @@ pub trait RunnerProcessManager: Send + Sync {
     fn get_tracked_processes(&self) -> Vec<(ProcessId, String)>;
 }
 
+/// Trait object-safe version of RunnerProcessManager for dynamic dispatch
+///
+/// This trait provides the same interface as RunnerProcessManager but uses boxed
+/// trait objects for return types, making it suitable for use in trait objects.
+/// This allows for dynamic dispatch when needed while still providing the
+/// associated type version for static dispatch scenarios.
+#[async_trait]
+pub trait DynRunnerProcessManager: Send + Sync {
+    /// Start the server process using the configuration provided during construction
+    async fn start_server(&self) -> Result<Box<dyn ProcessHandle>>;
+
+    /// Spawn a new process with the given parameters and track it for cleanup
+    async fn spawn_process(
+        &self,
+        command: &str,
+        args: &[String],
+        working_dir: Option<&str>,
+        env: Option<&HashMap<String, String>>,
+    ) -> Result<Box<dyn ProcessHandle>>;
+
+    /// Cleanup all tracked processes and release resources
+    async fn cleanup(&self) -> Result<()>;
+
+    /// Get the number of currently tracked active processes
+    fn active_process_count(&self) -> usize;
+
+    /// Get information about all currently tracked processes
+    fn get_tracked_processes(&self) -> Vec<(ProcessId, String)>;
+}
+
+/// Blanket implementation to automatically provide DynRunnerProcessManager for any RunnerProcessManager
+#[async_trait]
+impl<T> DynRunnerProcessManager for T
+where
+    T: RunnerProcessManager + Send + Sync,
+    T::Handle: 'static,
+{
+    async fn start_server(&self) -> Result<Box<dyn ProcessHandle>> {
+        let handle = RunnerProcessManager::start_server(self).await?;
+        Ok(Box::new(handle))
+    }
+
+    async fn spawn_process(
+        &self,
+        command: &str,
+        args: &[String],
+        working_dir: Option<&str>,
+        env: Option<&HashMap<String, String>>,
+    ) -> Result<Box<dyn ProcessHandle>> {
+        let handle = RunnerProcessManager::spawn_process(self, command, args, working_dir, env).await?;
+        Ok(Box::new(handle))
+    }
+
+    async fn cleanup(&self) -> Result<()> {
+        RunnerProcessManager::cleanup(self).await
+    }
+
+    fn active_process_count(&self) -> usize {
+        RunnerProcessManager::active_process_count(self)
+    }
+
+    fn get_tracked_processes(&self) -> Vec<(ProcessId, String)> {
+        RunnerProcessManager::get_tracked_processes(self)
+    }
+}
+
 /// Factory trait for creating platform-specific RunnerProcessManager implementations
 ///
 /// This trait provides a platform-independent way to create RunnerProcessManager
@@ -212,7 +281,7 @@ pub trait RunnerProcessManagerFactory {
     /// # Returns
     ///
     /// Returns a new process manager instance or an error if creation fails.
-    async fn create_process_manager(config: &RunnerConfig) -> Result<Self::Manager>;
+    fn create_process_manager(config: &RunnerConfig) -> Self::Manager;
 
     /// Get the platform name for logging and debugging
     ///

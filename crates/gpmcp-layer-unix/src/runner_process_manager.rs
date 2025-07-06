@@ -1,11 +1,15 @@
+use crate::UnixProcessHandle;
+use crate::unix_process_manager::UnixProcessManager;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use gpmcp_layer_core::config::RunnerConfig;
+use gpmcp_layer_core::process::{
+    ProcessHandle, ProcessId, ProcessLifecycle, ProcessManager, ProcessTermination,
+    TerminationResult,
+};
+use gpmcp_layer_core::process_manager_trait::{RunnerProcessManager, RunnerProcessManagerFactory};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use gpmcp_layer_core::config::RunnerConfig;
-use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult};
-use gpmcp_layer_core::process_manager_trait::{RunnerProcessManager, RunnerProcessManagerFactory};
-use crate::unix_process_manager::UnixProcessManager;
 
 /// Unix implementation of the RunnerProcessManager trait
 ///
@@ -14,7 +18,7 @@ use crate::unix_process_manager::UnixProcessManager;
 /// configuration handling, and emergency cleanup.
 pub struct UnixRunnerProcessManager {
     /// The underlying platform-specific process manager
-    platform_manager: Arc<dyn ProcessManager + Send + Sync>,
+    platform_manager: Arc<UnixProcessManager>,
     /// Thread-safe tracking of active processes
     active_processes: Arc<Mutex<HashMap<ProcessId, String>>>,
     /// Stored runner configuration
@@ -23,18 +27,18 @@ pub struct UnixRunnerProcessManager {
 
 #[async_trait]
 impl RunnerProcessManager for UnixRunnerProcessManager {
-    async fn new(config: &RunnerConfig) -> Result<Self> {
-        let platform_manager: Arc<dyn ProcessManager + Send + Sync> =
-            Arc::new(UnixProcessManager::new());
+    type Handle = UnixProcessHandle;
+    fn new(config: &RunnerConfig) -> Self {
+        let platform_manager: Arc<UnixProcessManager> = Arc::new(UnixProcessManager::new());
 
-        Ok(Self {
+        Self {
             platform_manager,
             active_processes: Arc::new(Mutex::new(HashMap::new())),
             runner_config: config.clone(),
-        })
+        }
     }
 
-    async fn start_server(&self) -> Result<Box<dyn ProcessHandle>> {
+    async fn start_server(&self) -> Result<Self::Handle> {
         let command = &self.runner_config.command;
         let args = &self.runner_config.args;
         let working_dir = self
@@ -67,7 +71,7 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: Option<&HashMap<String, String>>,
-    ) -> Result<Box<dyn ProcessHandle>> {
+    ) -> Result<Self::Handle> {
         // Use empty environment if none provided
         let default_env = HashMap::new();
         let env_map = env.unwrap_or(&default_env);
@@ -100,13 +104,13 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
             let result = self.platform_manager.terminate_process_tree(pid).await;
             match result {
                 TerminationResult::Success => {
-                    tracing::info!("Successfully terminated process tree for PID {}", pid.0);
+                    tracing::info!("Successfully terminated process tree for PID {}", pid);
                 }
                 TerminationResult::ProcessNotFound => {
-                    tracing::info!("Process {} already terminated", pid.0);
+                    tracing::info!("Process {} already terminated", pid);
                 }
                 other => {
-                    tracing::warn!("Failed to terminate process {}: {:?}", pid.0, other);
+                    tracing::warn!("Failed to terminate process {}: {:?}", pid, other);
                 }
             }
         }
@@ -149,13 +153,13 @@ impl Drop for UnixRunnerProcessManager {
                 use nix::sys::signal::{self, Signal};
                 use nix::unistd::Pid as NixPid;
 
-                let nix_pid = NixPid::from_raw(pid.0 as i32);
+                let nix_pid = NixPid::from_raw(pid as i32);
 
                 // Try SIGTERM first
                 if let Err(e) = signal::kill(nix_pid, Signal::SIGTERM) {
                     tracing::warn!(
                         "Failed to send SIGTERM to process {} during drop: {}",
-                        pid.0,
+                        pid,
                         e
                     );
 
@@ -163,7 +167,7 @@ impl Drop for UnixRunnerProcessManager {
                     if let Err(e) = signal::kill(nix_pid, Signal::SIGKILL) {
                         tracing::error!(
                             "Failed to send SIGKILL to process {} during drop: {}",
-                            pid.0,
+                            pid,
                             e
                         );
                     }
@@ -180,8 +184,8 @@ pub struct UnixRunnerProcessManagerFactory;
 impl RunnerProcessManagerFactory for UnixRunnerProcessManagerFactory {
     type Manager = UnixRunnerProcessManager;
 
-    async fn create_process_manager(config: &RunnerConfig) -> Result<Self::Manager> {
-        UnixRunnerProcessManager::new(config).await
+    fn create_process_manager(config: &RunnerConfig) -> Self::Manager {
+        UnixRunnerProcessManager::new(config)
     }
 
     fn platform_name() -> &'static str {
@@ -191,7 +195,6 @@ impl RunnerProcessManagerFactory for UnixRunnerProcessManagerFactory {
 
 #[cfg(test)]
 mod tests {
-
 
     // Note: Tests will be added in a future task as requested by the user
     // This module is here to show the structure for when tests are implemented

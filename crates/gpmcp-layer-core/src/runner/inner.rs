@@ -1,59 +1,38 @@
 use crate::config::{RunnerConfig, Transport};
 use crate::error::GpmcpError;
-use crate::process_manager_trait::RunnerProcessManager;
+use crate::process_manager_trait::DynRunnerProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
-
-pub struct Initialized;
-
-pub struct Uninitialized;
+use crate::layer::{Initialized, Uninitialized};
 
 #[derive(Clone)]
 pub struct GpmcpRunnerInner<Status> {
     cancellation_token: Arc<CancellationToken>,
     runner_config: RunnerConfig,
     service_coordinator: Arc<RwLock<Option<ServiceCoordinator>>>,
-    process_manager: Arc<RwLock<Option<Box<dyn RunnerProcessManager>>>>,
+    process_manager: Arc<dyn DynRunnerProcessManager>,
     _status: std::marker::PhantomData<Status>,
 }
 
 impl GpmcpRunnerInner<Uninitialized> {
-    pub fn new(runner_config: RunnerConfig) -> Self {
+    pub fn new(
+        runner_config: RunnerConfig,
+        process_manager: Arc<dyn DynRunnerProcessManager>,
+    ) -> Self {
         Self {
             cancellation_token: Arc::new(CancellationToken::new()),
             runner_config,
             service_coordinator: Arc::new(RwLock::new(None)),
-            process_manager: Arc::new(RwLock::new(None)),
+            process_manager,
             _status: Default::default(),
         }
     }
-    pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> {
-        // Default implementation - will be deprecated once main crate provides factory
-        unimplemented!(
-            "Use connect_with_factory instead - process manager creation moved to main crate"
-        )
-    }
 
-    pub async fn connect_with_factory<F>(
-        &self,
-        factory_fn: F,
-    ) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError>
-    where
-        F: FnOnce(
-            &RunnerConfig,
-        ) -> Pin<
-            Box<
-                dyn std::future::Future<
-                        Output = Result<Box<dyn RunnerProcessManager>, anyhow::Error>,
-                    > + Send,
-            >,
-        >,
-    {
+    pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> {
         info!(
             "Creating GpmcpRunner for server: {}",
             self.runner_config.name
@@ -61,18 +40,13 @@ impl GpmcpRunnerInner<Uninitialized> {
 
         // Determine transport type and create appropriate managers
 
-        // Create process manager if needed (for commands that need subprocess)
-        let process_manager = factory_fn(&self.runner_config).await.map_err(|e| {
-            GpmcpError::process_error(format!("Failed to create process manager: {e}"))
-        })?;
-
         // For SSE transport, start the server process first
         if matches!(self.runner_config.transport, Transport::Sse { .. }) {
             info!("Starting server process for SSE transport");
-            let _handle = process_manager
-                .start_server()
-                .await
-                .map_err(|e| GpmcpError::process_error(format!("Failed to start server: {e}")))?;
+            let _handle =
+                self.process_manager.start_server().await.map_err(|e| {
+                    GpmcpError::process_error(format!("Failed to start server: {e}"))
+                })?;
         }
 
         // Create transport manager
@@ -93,7 +67,6 @@ impl GpmcpRunnerInner<Uninitialized> {
             .write()
             .await
             .replace(service_coordinator);
-        self.process_manager.write().await.replace(process_manager);
 
         Ok(GpmcpRunnerInner {
             cancellation_token: self.cancellation_token.clone(),
@@ -214,12 +187,10 @@ impl GpmcpRunnerInner<Initialized> {
             })?;
         }
 
-        // Then cleanup process if exists
-        if let Some(manager) = process_manager.write().await.take() {
-            manager.cleanup().await.map_err(|e| {
-                GpmcpError::process_error(format!("Failed to cleanup process: {e}"))
-            })?;
-        }
+        process_manager
+            .cleanup()
+            .await
+            .map_err(|e| GpmcpError::process_error(format!("Failed to cleanup process: {e}")))?;
 
         info!("GpmcpRunner cancelled successfully");
         Ok(())

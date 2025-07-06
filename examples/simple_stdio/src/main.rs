@@ -1,4 +1,5 @@
-use gpmcp_layer::{GpmcpLayer, RunnerConfig};
+use gpmcp_layer::GpmcpCrossLayer;
+use gpmcp_layer::config::RunnerConfig;
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -19,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
         .build()?;
 
     // Create a new GpmcpLayer instance with the config.
-    let layer = GpmcpLayer::new(config)?.connect().await?;
+    let layer = GpmcpCrossLayer::new(config).connect().await?;
 
     // List available tools.
     let tools = layer.list_tools().await?;
