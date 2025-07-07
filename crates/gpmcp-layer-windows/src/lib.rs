@@ -17,7 +17,4 @@ impl ProcessManagerFactory for WindowsProcessManagerFactory {
         WindowsProcessManager::new()
     }
 
-    fn platform_name() -> &'static str {
-        "Windows"
-    }
 }

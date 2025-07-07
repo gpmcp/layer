@@ -1,7 +1,7 @@
 use crate::config::{RunnerConfig, Transport};
 use crate::error::GpmcpError;
 use crate::layer::{Initialized, Uninitialized};
-use crate::process_manager_trait::DynRunnerProcessManager;
+use crate::process_manager_trait::RunnerProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;
 use std::sync::Arc;
@@ -10,19 +10,16 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 #[derive(Clone)]
-pub struct GpmcpRunnerInner<Status> {
+pub struct GpmcpRunnerInner<Status, Manager> {
     cancellation_token: Arc<CancellationToken>,
     runner_config: RunnerConfig,
     service_coordinator: Arc<RwLock<Option<ServiceCoordinator>>>,
-    process_manager: Arc<dyn DynRunnerProcessManager>,
+    process_manager: Arc<Manager>,
     _status: std::marker::PhantomData<Status>,
 }
 
-impl GpmcpRunnerInner<Uninitialized> {
-    pub fn new(
-        runner_config: RunnerConfig,
-        process_manager: Arc<dyn DynRunnerProcessManager>,
-    ) -> Self {
+impl<Manager: RunnerProcessManager> GpmcpRunnerInner<Uninitialized, Manager> {
+    pub fn new(runner_config: RunnerConfig, process_manager: Arc<Manager>) -> Self {
         Self {
             cancellation_token: Arc::new(CancellationToken::new()),
             runner_config,
@@ -32,7 +29,7 @@ impl GpmcpRunnerInner<Uninitialized> {
         }
     }
 
-    pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized>, GpmcpError> {
+    pub async fn connect(&self) -> Result<GpmcpRunnerInner<Initialized, Manager>, GpmcpError> {
         info!(
             "Creating GpmcpRunner for server: {}",
             self.runner_config.name
@@ -78,7 +75,7 @@ impl GpmcpRunnerInner<Uninitialized> {
     }
 }
 
-impl GpmcpRunnerInner<Initialized> {
+impl<Manager: RunnerProcessManager> GpmcpRunnerInner<Initialized, Manager> {
     /// List available tools from the MCP server
     pub async fn list_tools(&self) -> Result<rmcp::model::ListToolsResult, GpmcpError> {
         if let Some(ref coordinator) = *self.service_coordinator.read().await {

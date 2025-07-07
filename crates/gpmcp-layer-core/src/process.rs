@@ -1,7 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::time::Duration;
 
 /// Unique identifier for a process
 pub type ProcessId = u32;
@@ -82,29 +81,11 @@ pub trait ProcessLifecycle: Send + Sync {
         working_dir: Option<&str>,
         env: &HashMap<String, String>,
     ) -> Result<Self::Handle>;
-
-    /// Check if a process is still running and healthy
-    async fn is_process_healthy(&self, handle: &dyn ProcessHandle) -> bool;
-
-    /// Get detailed information about a process
-    async fn get_process_info(&self, handle: &dyn ProcessHandle) -> Result<ProcessInfo>;
-
-    /// Wait for a process to exit with optional timeout
-    async fn wait_for_exit(
-        &self,
-        handle: &mut dyn ProcessHandle,
-        timeout: Option<Duration>,
-    ) -> Result<ProcessStatus>;
 }
 
 /// Trait for comprehensive process termination including process trees
 #[async_trait]
 pub trait ProcessTermination: Send + Sync {
-    /// Terminate a single process gracefully (SIGTERM on Unix)
-    async fn terminate_gracefully(&self, handle: &mut dyn ProcessHandle) -> TerminationResult;
-
-    /// Force kill a single process (SIGKILL on Unix)
-    async fn force_kill(&self, handle: &mut dyn ProcessHandle) -> TerminationResult;
 
     /// Find all child processes of a given process
     async fn find_child_processes(&self, pid: ProcessId) -> Result<Vec<ProcessId>>;
@@ -112,55 +93,7 @@ pub trait ProcessTermination: Send + Sync {
     /// Terminate an entire process tree (parent and all descendants)
     async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult;
 
-    /// Terminate a process group (Unix only, returns ProcessNotFound on Windows)
-    async fn terminate_process_group(&self, pid: ProcessId) -> TerminationResult;
 
-    /// Complete termination strategy: process group -> process tree -> individual process
-    async fn terminate_completely(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
-        if let Some(pid) = handle.get_pid() {
-            // Step 1: Try process group termination (Unix only)
-            match self.terminate_process_group(pid).await {
-                TerminationResult::Success => return TerminationResult::Success,
-                TerminationResult::ProcessNotFound => {
-                    // Process group not found, continue to next step
-                }
-                _ => {
-                    // Process group termination failed, try process tree
-                }
-            }
-
-            // Step 2: Try process tree termination
-            match self.terminate_process_tree(pid).await {
-                TerminationResult::Success => return TerminationResult::Success,
-                TerminationResult::ProcessNotFound => {
-                    // Process tree not found, continue to individual termination
-                }
-                _ => {
-                    // Process tree termination failed, continue to individual termination
-                }
-            }
-        }
-
-        // Step 3: Individual process termination with escalation
-        match self.terminate_gracefully(handle).await {
-            TerminationResult::Success => {
-                // Wait a bit to see if process exits gracefully
-                tokio::time::sleep(Duration::from_millis(1000)).await;
-
-                // If still running, force kill
-                if handle.is_running().await {
-                    self.force_kill(handle).await
-                } else {
-                    TerminationResult::Success
-                }
-            }
-            TerminationResult::ProcessNotFound => TerminationResult::Success,
-            _ => {
-                // Graceful termination failed, try force kill
-                self.force_kill(handle).await
-            }
-        }
-    }
 }
 
 /// Trait representing a handle to a running process
@@ -171,18 +104,6 @@ pub trait ProcessHandle: Send + Sync {
 
     /// Get the command that started this process
     fn get_command(&self) -> &str;
-
-    /// Get the arguments passed to this process
-    fn get_args(&self) -> &[String];
-
-    /// Check if the process is still running (non-blocking)
-    async fn is_running(&self) -> bool;
-
-    /// Try to get exit status without blocking
-    async fn try_wait(&mut self) -> Result<Option<ProcessStatus>>;
-
-    /// Wait for the process to exit (blocking)
-    async fn wait(&mut self) -> Result<ProcessStatus>;
 
     /// Kill the process (platform-specific implementation)
     async fn kill(&mut self) -> Result<()>;
@@ -207,9 +128,6 @@ pub trait ProcessManagerFactory {
 
     /// Create a process manager for the current platform
     fn create_process_manager() -> Self::Manager;
-
-    /// Get the platform name for logging and debugging
-    fn platform_name() -> &'static str;
 }
 
 /// Implementation of ProcessHandle for boxed trait objects to enable associated type usage
@@ -221,22 +139,6 @@ impl ProcessHandle for Box<dyn ProcessHandle> {
 
     fn get_command(&self) -> &str {
         (**self).get_command()
-    }
-
-    fn get_args(&self) -> &[String] {
-        (**self).get_args()
-    }
-
-    async fn is_running(&self) -> bool {
-        (**self).is_running().await
-    }
-
-    async fn try_wait(&mut self) -> Result<Option<ProcessStatus>> {
-        (**self).try_wait().await
-    }
-
-    async fn wait(&mut self) -> Result<ProcessStatus> {
-        (**self).wait().await
     }
 
     async fn kill(&mut self) -> Result<()> {

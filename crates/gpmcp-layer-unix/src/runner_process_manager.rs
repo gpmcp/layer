@@ -64,33 +64,6 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
         Ok(handle)
     }
 
-    async fn spawn_process(
-        &self,
-        command: &str,
-        args: &[String],
-        working_dir: Option<&str>,
-        env: Option<&HashMap<String, String>>,
-    ) -> Result<Self::Handle> {
-        // Use empty environment if none provided
-        let default_env = HashMap::new();
-        let env_map = env.unwrap_or(&default_env);
-
-        // Delegate to the platform manager
-        let handle = self
-            .platform_manager
-            .spawn_process(command, args, working_dir, env_map)
-            .await
-            .with_context(|| format!("Failed to spawn process: {command}"))?;
-
-        // Track the process
-        if let Some(pid) = handle.get_pid() {
-            let mut active = self.active_processes.lock().unwrap();
-            active.insert(pid, command.to_string());
-        }
-
-        Ok(handle)
-    }
-
     async fn cleanup(&self) -> Result<()> {
         // Get a snapshot of tracked processes
         let active_processes = {
@@ -119,18 +92,6 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
 
         // Cleanup the platform manager
         self.platform_manager.cleanup().await
-    }
-
-    fn active_process_count(&self) -> usize {
-        self.active_processes.lock().unwrap().len()
-    }
-
-    fn get_tracked_processes(&self) -> Vec<(ProcessId, String)> {
-        let active = self.active_processes.lock().unwrap();
-        active
-            .iter()
-            .map(|(pid, cmd)| (*pid, cmd.clone()))
-            .collect()
     }
 }
 
@@ -185,10 +146,6 @@ impl RunnerProcessManagerFactory for UnixRunnerProcessManagerFactory {
 
     fn create_process_manager(config: &RunnerConfig) -> Self::Manager {
         UnixRunnerProcessManager::new(config)
-    }
-
-    fn platform_name() -> &'static str {
-        "unix"
     }
 }
 

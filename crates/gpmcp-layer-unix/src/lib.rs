@@ -14,7 +14,4 @@ impl ProcessManagerFactory for UnixProcessManagerFactory {
         UnixProcessManager::new()
     }
 
-    fn platform_name() -> &'static str {
-        "Unix"
-    }
 }

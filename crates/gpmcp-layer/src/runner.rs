@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 /// High-level platform-independent GpmcpRunner
 pub struct GpmcpCrossLayer<Status> {
-    inner: GpmcpLayer<Status>,
+    inner: GpmcpLayer<
+        Status,
+        <PlatformRunnerProcessManagerFactory as RunnerProcessManagerFactory>::Manager,
+    >,
 }
 
 impl GpmcpCrossLayer<Uninitialized> {
