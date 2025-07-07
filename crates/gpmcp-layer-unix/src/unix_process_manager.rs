@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use gpmcp_layer_core::process::{
-    ProcessHandle, ProcessId, ProcessLifecycle, ProcessManager,
-    ProcessTermination, TerminationResult,
+    ProcessHandle, ProcessId, ProcessLifecycle, ProcessManager, ProcessTermination,
+    TerminationResult,
 };
 use std::collections::HashMap;
 use std::time::Duration;
