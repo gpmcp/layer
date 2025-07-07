@@ -1,5 +1,6 @@
 use crate::config::{RunnerConfig, Transport};
 use anyhow::{Context, Result};
+use backon::{ExponentialBuilder, Retryable};
 use rmcp::transport::{SseClientTransport, TokioChildProcess};
 use tokio::process::Command;
 use tracing::{info, warn};
@@ -88,28 +89,24 @@ impl TransportManager {
             url, max_attempts, interval_ms
         );
 
-        for attempt in 1..=max_attempts {
-            // Try to create a temporary transport and test connectivity
-            match Self::test_server_connectivity(url).await {
-                Ok(()) => {
-                    info!("Server is ready after {} attempts", attempt);
-                    return Ok(());
-                }
-                Err(e) => {
-                    if attempt == max_attempts {
-                        return Err(anyhow::anyhow!(
-                            "Server not ready after {} attempts. Last error: {}",
-                            max_attempts,
-                            e
-                        ));
-                    }
-                    // Wait before next attempt
-                    tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
-                }
-            }
-        }
+        let retry_config = ExponentialBuilder::default()
+            .with_max_times(max_attempts as usize)
+            .with_min_delay(tokio::time::Duration::from_millis(interval_ms))
+            .with_max_delay(tokio::time::Duration::from_millis(interval_ms));
 
-        Err(anyhow::anyhow!("Server polling failed unexpectedly"))
+        let test_connectivity = || async { Self::test_server_connectivity(url).await };
+
+        match test_connectivity.retry(&retry_config).await {
+            Ok(_) => {
+                info!("Server is ready");
+                Ok(())
+            }
+            Err(e) => Err(anyhow::anyhow!(
+                "Server not ready after {} attempts. Last error: {}",
+                max_attempts,
+                e
+            )),
+        }
     }
 
     /// Test server connectivity by creating a temporary connection and calling list_tools
