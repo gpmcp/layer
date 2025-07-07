@@ -16,5 +16,4 @@ impl ProcessManagerFactory for WindowsProcessManagerFactory {
     fn create_process_manager() -> Self::Manager {
         WindowsProcessManager::new()
     }
-
 }

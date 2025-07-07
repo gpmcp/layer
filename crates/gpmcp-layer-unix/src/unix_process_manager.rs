@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use gpmcp_layer_core::process::{
-    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus,
+    ProcessHandle, ProcessId, ProcessLifecycle, ProcessManager,
     ProcessTermination, TerminationResult,
 };
 use std::collections::HashMap;
@@ -24,10 +24,7 @@ mod unix_impl {
 
     impl UnixProcessHandle {
         pub fn new(child: Child, command: String) -> Self {
-            Self {
-                child,
-                command,
-            }
+            Self { child, command }
         }
     }
 
@@ -99,17 +96,12 @@ mod unix_impl {
                 );
             }
 
-            Ok(UnixProcessHandle::new(
-                child,
-                command.to_string(),
-            ))
+            Ok(UnixProcessHandle::new(child, command.to_string()))
         }
     }
 
     #[async_trait]
     impl ProcessTermination for UnixProcessManager {
-        
-
         async fn find_child_processes(&self, parent_pid: ProcessId) -> Result<Vec<ProcessId>> {
             let mut system = self.system.lock().unwrap();
             system.refresh_processes_specifics(

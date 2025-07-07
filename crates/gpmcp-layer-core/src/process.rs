@@ -86,14 +86,11 @@ pub trait ProcessLifecycle: Send + Sync {
 /// Trait for comprehensive process termination including process trees
 #[async_trait]
 pub trait ProcessTermination: Send + Sync {
-
     /// Find all child processes of a given process
     async fn find_child_processes(&self, pid: ProcessId) -> Result<Vec<ProcessId>>;
 
     /// Terminate an entire process tree (parent and all descendants)
     async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult;
-
-
 }
 
 /// Trait representing a handle to a running process

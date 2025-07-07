@@ -18,10 +18,7 @@ pub struct WindowsProcessHandle {
 
 impl WindowsProcessHandle {
     pub fn new(child: Child, command: String) -> Self {
-        Self {
-            child,
-            command,
-        }
+        Self { child, command }
     }
 }
 
@@ -99,10 +96,7 @@ impl ProcessLifecycle for WindowsProcessManager {
             );
         }
 
-        Ok(WindowsProcessHandle::new(
-            child,
-            command.to_string(),
-        ))
+        Ok(WindowsProcessHandle::new(child, command.to_string()))
     }
 }
 
