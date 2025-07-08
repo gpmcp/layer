@@ -95,12 +95,10 @@ impl TransportManager {
                     info!("Server is ready after {} attempts", attempt);
                     return Ok(());
                 }
-                Err(e) => {
+                Err(_) => {
                     if attempt == max_attempts {
                         return Err(anyhow::anyhow!(
-                            "Server not ready after {} attempts. Last error: {}",
-                            max_attempts,
-                            e
+                            "Cannot connect to {url}. Server not ready after {max_attempts} attempts."
                         ));
                     }
                     // Wait before next attempt
