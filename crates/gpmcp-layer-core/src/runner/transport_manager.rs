@@ -1,7 +1,8 @@
 use crate::config::{RunnerConfig, Transport};
 use anyhow::{Context, Result};
-use backon::{ExponentialBuilder, Retryable};
+use backon::{BackoffBuilder, ExponentialBuilder, Retryable};
 use rmcp::transport::{SseClientTransport, TokioChildProcess};
+use std::time::Duration;
 use tokio::process::Command;
 use tracing::{info, warn};
 
@@ -84,29 +85,17 @@ impl TransportManager {
 
     /// Poll the server readiness by attempting to connect and call list_tools
     async fn poll_server_readiness(url: &str, max_attempts: u32, interval_ms: u64) -> Result<()> {
-        info!(
-            "Polling server readiness at {} (max {} attempts, {}ms interval)",
-            url, max_attempts, interval_ms
-        );
+        info!(url=%url, max_attempts=?max_attempts, interval_ms=?interval_ms, "Polling server readiness");
 
-        let retry_config = ExponentialBuilder::default()
+        let poll = ExponentialBuilder::new()
+            .with_jitter()
+            .with_factor(1.0)
             .with_max_times(max_attempts as usize)
-            .with_min_delay(tokio::time::Duration::from_millis(interval_ms))
-            .with_max_delay(tokio::time::Duration::from_millis(interval_ms));
+            .with_min_delay(Duration::from_millis(interval_ms))
+            .with_max_delay(Duration::from_secs(1))
+            .build();
 
-        let test_connectivity = || async { Self::test_server_connectivity(url).await };
-
-        match test_connectivity.retry(&retry_config).await {
-            Ok(_) => {
-                info!("Server is ready");
-                Ok(())
-            }
-            Err(e) => Err(anyhow::anyhow!(
-                "Server not ready after {} attempts. Last error: {}",
-                max_attempts,
-                e
-            )),
-        }
+        (|| Self::test_server_connectivity(url)).retry(poll).await
     }
 
     /// Test server connectivity by creating a temporary connection and calling list_tools
