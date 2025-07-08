@@ -14,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
         .env("TRANSPORT", "sse") // Set TRANSPORT environment variable
         .env("PORT", PORT) // Set PORT for SSE
         .transport(Transport::Sse {
-            url: format!("http://0.0.0.0:{PORT}/sse"),
+            url: format!("http://127.0.0.1:{PORT}/sse"),
         })
         .working_directory(
             // Set the working directory to the test-mcp-server example server
@@ -34,6 +34,5 @@ async fn main() -> anyhow::Result<()> {
     tools.tools.into_iter().for_each(|tool| {
         println!("{}", tool.name);
     });
-
     Ok(())
 }
