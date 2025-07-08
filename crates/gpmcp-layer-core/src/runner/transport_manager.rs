@@ -68,10 +68,6 @@ impl TransportManager {
     /// Creates an SSE transport with server readiness polling
     async fn create_sse_transport(url: impl ToString) -> Result<TransportVariant> {
         let url_string = url.to_string();
-        
-        if url_string.contains("0.0.0.0") {
-            println!("SSE transport URL contains 0.0.0.0 address. This may cause connection issues if the port is not exposed publicly. Consider using a specific IP address or 'localhost' for local development.");
-        }
 
         // Poll the server to check if it's ready using list_tools request
         // Use shorter timeout for faster failure in test environments
@@ -99,12 +95,10 @@ impl TransportManager {
                     info!("Server is ready after {} attempts", attempt);
                     return Ok(());
                 }
-                Err(e) => {
+                Err(_) => {
                     if attempt == max_attempts {
                         return Err(anyhow::anyhow!(
-                            "Server not ready after {} attempts. Last error: {}",
-                            max_attempts,
-                            e
+                            "Cannot connect to {url}. Server not ready after {max_attempts} attempts."
                         ));
                     }
                     // Wait before next attempt
