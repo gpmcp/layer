@@ -275,24 +275,11 @@ impl ProcessManager for WindowsProcessManager {
             );
         }
 
-        // Capture and stream stdout - the stream function will detect it's stdout and route accordingly
-        if let Some(mut stdout) = child.stdout.take() {
-            tokio::spawn(async move {
-                if let Err(e) = stream(&mut stdout, out).await {
-                    warn!("Error streaming stdout: {}", e);
-                }
-            });
-        }
+        let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
 
-        // Capture and stream stderr - the stream function will detect it's stderr and route accordingly
-        if let Some(mut stderr) = child.stderr.take() {
-            tokio::spawn(async move {
-                if let Err(e) = stream(&mut stderr, err).await {
-                    warn!("Error streaming stderr: {}", e);
-                }
-            });
-        }
-
+        tokio::spawn(
+            async move { tokio::try_join!(stream(stdout, out), stream(stderr, err)).ok() },
+        );
         Ok(WindowsProcessHandle::new(child, command.to_string()))
     }
 }
