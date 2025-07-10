@@ -2,10 +2,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use gpmcp_layer_core::{
     config::RunnerConfig,
-    process::{
-        ProcessHandle, ProcessId, ProcessLifecycle, ProcessManager, ProcessTermination,
-        TerminationResult,
-    },
+    process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult},
     process_manager_trait::{RunnerProcessManager, RunnerProcessManagerFactory},
 };
 use std::collections::HashMap;

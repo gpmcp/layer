@@ -3,10 +3,7 @@ use crate::unix_process_manager::UnixProcessManager;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use gpmcp_layer_core::config::RunnerConfig;
-use gpmcp_layer_core::process::{
-    ProcessHandle, ProcessId, ProcessLifecycle, ProcessManager, ProcessTermination,
-    TerminationResult,
-};
+use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult};
 use gpmcp_layer_core::process_manager_trait::{RunnerProcessManager, RunnerProcessManagerFactory};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -147,11 +144,4 @@ impl RunnerProcessManagerFactory for UnixRunnerProcessManagerFactory {
     fn create_process_manager(config: &RunnerConfig) -> Self::Manager {
         UnixRunnerProcessManager::new(config)
     }
-}
-
-#[cfg(test)]
-mod tests {
-
-    // Note: Tests will be added in a future task as requested by the user
-    // This module is here to show the structure for when tests are implemented
 }
