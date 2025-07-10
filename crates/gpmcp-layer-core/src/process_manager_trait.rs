@@ -1,9 +1,12 @@
+use crate::config::RunnerConfig;
+use crate::layer::{LayerStdErr, LayerStdOut};
+use crate::process::ProcessHandle;
 use anyhow::Result;
 use async_trait::async_trait;
-
-use crate::config::RunnerConfig;
-use crate::process::ProcessHandle;
-
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio_stream::StreamExt;
+use tokio_util::bytes::{Buf, BytesMut};
+use tokio_util::codec::{Decoder, FramedRead};
 /// High-level process manager trait for platform-independent process orchestration
 ///
 /// This trait defines the interface for managing processes at a high level, including
@@ -90,7 +93,7 @@ pub trait RunnerProcessManager: Send + Sync {
     /// // let server_handle = manager.start_server().await?;
     /// // println!("Server started with PID: {:?}", server_handle.get_pid());
     /// ```
-    async fn start_server(&self) -> Result<Self::Handle>;
+    async fn start_server(&self, out: LayerStdOut, err: LayerStdErr) -> Result<Self::Handle>;
 
     /// Cleanup all tracked processes and release resources
     ///
@@ -155,4 +158,74 @@ pub trait RunnerProcessManagerFactory {
     ///
     /// Returns a new process manager instance or an error if creation fails.
     fn create_process_manager(config: &RunnerConfig) -> Self::Manager;
+}
+
+struct Utf8Codec;
+
+impl Decoder for Utf8Codec {
+    type Item = String;
+    type Error = anyhow::Error;
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if src.is_empty() {
+            return Ok(None);
+        }
+
+        match str::from_utf8(src) {
+            Ok(s) => {
+                let out = s.to_owned();
+                src.clear();
+
+                if out.is_empty() {
+                    return Ok(None);
+                }
+
+                Ok(Some(out))
+            }
+            Err(e) if e.error_len().is_none() => {
+                let valid = e.valid_up_to();
+
+                if valid == 0 {
+                    return Ok(None);
+                }
+
+                let out = str::from_utf8(&src[..valid])?.to_owned();
+                src.advance(valid);
+                Ok(Some(out))
+            }
+            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e).into()),
+        }
+    }
+}
+pub async fn stream<A: AsyncReadExt + Unpin>(
+    io: &mut Option<A>,
+    writer: &mut (dyn AsyncWrite + Unpin + Send + Sync + 'static),
+) -> tokio::io::Result<()> {
+    if let Some(io) = io.as_mut() {
+        let mut frames = FramedRead::with_capacity(io, Utf8Codec, 1024);
+        return stream_frames(&mut frames, writer).await;
+    }
+    Ok(())
+}
+
+async fn stream_frames<R>(
+    frames: &mut FramedRead<R, Utf8Codec>,
+    writer: &mut (dyn AsyncWrite + Unpin + Send + Sync + 'static),
+) -> tokio::io::Result<()>
+where
+    R: AsyncReadExt + Unpin,
+{
+    while let Some(frame) = frames.next().await {
+        match frame {
+            Ok(text) => {
+                let bytes = text.as_bytes();
+                writer.write_all(bytes).await?;
+                writer.flush().await?;
+            }
+            Err(e) => {
+                return Err(tokio::io::Error::new(tokio::io::ErrorKind::InvalidData, e));
+            }
+        }
+    }
+
+    Ok(())
 }

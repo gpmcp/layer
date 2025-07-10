@@ -26,3 +26,4 @@ rmcp = { git = "https://github.com/gpmcp/rust-sdk", rev = "b9d7d61ebd6e8385cbc4a
 tokio-util = "0.7.15"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 backon = "1.2"
+tokio-stream = "0.1.17"

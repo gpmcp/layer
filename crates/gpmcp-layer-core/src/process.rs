@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use std::collections::HashMap;
+use crate::layer::{LayerStdErr, LayerStdOut};
 
 /// Unique identifier for a process
 pub type ProcessId = u32;
@@ -105,6 +106,8 @@ pub trait ProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: &HashMap<String, String>,
+        out: LayerStdOut,
+        err: LayerStdErr,
     ) -> Result<Self::Handle>;
 }
 

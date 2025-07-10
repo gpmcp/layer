@@ -4,6 +4,8 @@ use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, Termin
 use std::collections::HashMap;
 use std::time::Duration;
 
+use gpmcp_layer_core::layer::{LayerStdErr, LayerStdOut};
+use gpmcp_layer_core::process_manager_trait::stream;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid as NixPid;
 use sysinfo::System;
@@ -179,6 +181,8 @@ impl ProcessManager for UnixProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: &HashMap<String, String>,
+        out: LayerStdOut,
+        err: LayerStdErr,
     ) -> Result<Self::Handle> {
         let mut cmd = Command::new(command);
         cmd.args(args);
@@ -193,10 +197,14 @@ impl ProcessManager for UnixProcessManager {
             cmd.env(key, value);
         }
 
+        // Configure stdout and stderr to be captured
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+
         // Create new process group for better process tree management
         cmd.process_group(0);
 
-        let child = cmd
+        let mut child = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn process: {command}"))?;
 
@@ -206,6 +214,26 @@ impl ProcessManager for UnixProcessManager {
                 "Spawned Unix process: {} (PID: {}) with args: {:?}",
                 command, pid, args
             );
+        }
+
+        // Capture and stream stdout
+        if let Some(stdout) = child.stdout.take() {
+            let mut out_clone = out.clone();
+            tokio::spawn(async move {
+                if let Err(e) = stream(&mut Some(stdout), &mut out_clone).await {
+                    warn!("Error streaming stdout: {}", e);
+                }
+            });
+        }
+
+        // Capture and stream stderr
+        if let Some(stderr) = child.stderr.take() {
+            let mut err_clone = err.clone();
+            tokio::spawn(async move {
+                if let Err(e) = stream(&mut Some(stderr), &mut err_clone).await {
+                    warn!("Error streaming stderr: {}", e);
+                }
+            });
         }
 
         Ok(UnixProcessHandle::new(child, command.to_string()))
