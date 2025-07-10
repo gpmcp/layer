@@ -218,9 +218,9 @@ impl ProcessManager for UnixProcessManager {
 
         let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
 
-        tokio::spawn(async move {
-            tokio::try_join!(stream(stdout, out), stream(stderr, err)).ok()
-        });
+        tokio::spawn(
+            async move { tokio::try_join!(stream(stdout, out), stream(stderr, err)).ok() },
+        );
         Ok(UnixProcessHandle::new(child, command.to_string()))
     }
 }
