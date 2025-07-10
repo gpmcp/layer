@@ -4,11 +4,11 @@ use crate::layer::{Initialized, Uninitialized};
 use crate::process_manager_trait::RunnerProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;
+use crate::{LayerStdErr, LayerStdOut};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
-use crate::{LayerStdErr, LayerStdOut};
 
 #[derive(Clone)]
 pub struct GpmcpRunnerInner<Status, Manager> {

@@ -3,9 +3,9 @@ use crate::unix_process_manager::UnixProcessManager;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use gpmcp_layer_core::config::RunnerConfig;
-use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult};
 use gpmcp_layer_core::process_manager_trait::{RunnerProcessManager, RunnerProcessManagerFactory};
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 

@@ -4,8 +4,8 @@ use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, Termin
 use std::collections::HashMap;
 use std::time::Duration;
 
-use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use gpmcp_layer_core::process_manager_trait::stream;
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid as NixPid;
 use sysinfo::System;
