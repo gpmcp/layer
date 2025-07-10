@@ -20,51 +20,6 @@ impl Clone for LayerStdOut {
         LayerStdOut(self.0.clone())
     }
 }
-
-impl AsyncWrite for LayerStdOut {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        let fut = self.0.lock();
-        tokio::pin!(fut);
-        match Future::poll(fut.as_mut(), cx) {
-            std::task::Poll::Ready(mut lock) => {
-                AsyncWrite::poll_write(std::pin::Pin::new(&mut *lock), cx, buf)
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
-
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let fut = self.0.lock();
-        tokio::pin!(fut);
-        match Future::poll(fut.as_mut(), cx) {
-            std::task::Poll::Ready(mut lock) => {
-                AsyncWrite::poll_flush(std::pin::Pin::new(&mut *lock), cx)
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
-
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let fut = self.0.lock();
-        tokio::pin!(fut);
-        match Future::poll(fut.as_mut(), cx) {
-            std::task::Poll::Ready(mut lock) => {
-                AsyncWrite::poll_shutdown(std::pin::Pin::new(&mut *lock), cx)
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
-}
 impl LayerStdOut {
     pub fn new(t: Box<dyn AsyncWrite + Unpin + Sync + Send>) -> LayerStdOut {
         LayerStdOut(Arc::new(Mutex::new(t)))
@@ -84,51 +39,6 @@ pub struct LayerStdErr(Arc<Mutex<Box<dyn AsyncWrite + Unpin + Sync + Send>>>);
 impl Clone for LayerStdErr {
     fn clone(&self) -> Self {
         LayerStdErr(self.0.clone())
-    }
-}
-
-impl AsyncWrite for LayerStdErr {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        let fut = self.0.lock();
-        tokio::pin!(fut);
-        match Future::poll(fut.as_mut(), cx) {
-            std::task::Poll::Ready(mut lock) => {
-                AsyncWrite::poll_write(std::pin::Pin::new(&mut *lock), cx, buf)
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
-
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let fut = self.0.lock();
-        tokio::pin!(fut);
-        match Future::poll(fut.as_mut(), cx) {
-            std::task::Poll::Ready(mut lock) => {
-                AsyncWrite::poll_flush(std::pin::Pin::new(&mut *lock), cx)
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
-
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let fut = self.0.lock();
-        tokio::pin!(fut);
-        match Future::poll(fut.as_mut(), cx) {
-            std::task::Poll::Ready(mut lock) => {
-                AsyncWrite::poll_shutdown(std::pin::Pin::new(&mut *lock), cx)
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
     }
 }
 

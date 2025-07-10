@@ -216,26 +216,27 @@ impl ProcessManager for UnixProcessManager {
             );
         }
 
-        // Capture and stream stdout
+        // Capture and stream stdout - the stream function will detect it's stdout and route accordingly
         if let Some(stdout) = child.stdout.take() {
-            let mut out_clone = out.clone();
+            let out_clone = out.clone();
+            let err_clone = err.clone();
             tokio::spawn(async move {
-                if let Err(e) = stream(&mut Some(stdout), &mut out_clone).await {
+                if let Err(e) = stream(&mut Some(stdout), out_clone, err_clone).await {
                     warn!("Error streaming stdout: {}", e);
                 }
             });
         }
 
-        // Capture and stream stderr
+        // Capture and stream stderr - the stream function will detect it's stderr and route accordingly
         if let Some(stderr) = child.stderr.take() {
-            let mut err_clone = err.clone();
+            let out_clone = out.clone();
+            let err_clone = err.clone();
             tokio::spawn(async move {
-                if let Err(e) = stream(&mut Some(stderr), &mut err_clone).await {
+                if let Err(e) = stream(&mut Some(stderr), out_clone, err_clone).await {
                     warn!("Error streaming stderr: {}", e);
                 }
             });
         }
-
         Ok(UnixProcessHandle::new(child, command.to_string()))
     }
 }
