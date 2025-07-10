@@ -198,11 +198,14 @@ impl Decoder for Utf8Codec {
     }
 }
 pub async fn stream<A: AsyncReadExt + Unpin + 'static>(
-    io: &mut A,
+    io: Option<A>,
     out: impl Into<LayerStdio>,
 ) -> tokio::io::Result<()> {
-    let mut frames = FramedRead::with_capacity(io, Utf8Codec, 1024);
-    stream_frames(&mut frames, out.into()).await
+    if let Some(io) = io {
+        let mut frames = FramedRead::with_capacity(io, Utf8Codec, 1024);
+        return stream_frames(&mut frames, out.into()).await;
+    }
+    Ok(())
 }
 
 async fn stream_frames<R: AsyncReadExt + Unpin>(
