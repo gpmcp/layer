@@ -277,7 +277,9 @@ impl ProcessManager for WindowsProcessManager {
 
         let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
 
-        let _ = tokio::join!(stream(stdout, out), stream(stderr, err));
+        tokio::spawn(async move {
+            tokio::try_join!(stream(stdout, out), stream(stderr, err)).ok()
+        });
         Ok(WindowsProcessHandle::new(child, command.to_string()))
     }
 }
