@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use gpmcp_layer_core::config::RunnerConfig;
 use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult};
 use gpmcp_layer_core::process_manager_trait::{RunnerProcessManager, RunnerProcessManagerFactory};
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -35,7 +36,7 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
         }
     }
 
-    async fn start_server(&self) -> Result<Self::Handle> {
+    async fn start_server(&self, out: LayerStdOut, err: LayerStdErr) -> Result<Self::Handle> {
         let command = &self.runner_config.command;
         let args = &self.runner_config.args;
         let working_dir = self
@@ -48,7 +49,7 @@ impl RunnerProcessManager for UnixRunnerProcessManager {
         // Use the platform manager to spawn the server process
         let handle = self
             .platform_manager
-            .spawn_process(command, args, working_dir, env)
+            .spawn_process(command, args, working_dir, env, out, err)
             .await
             .with_context(|| format!("Failed to start server with command: {command}"))?;
 

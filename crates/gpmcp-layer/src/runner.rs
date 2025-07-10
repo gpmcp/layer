@@ -2,6 +2,7 @@ use crate::factory::PlatformRunnerProcessManagerFactory;
 use gpmcp_layer_core::error::GpmcpError;
 use gpmcp_layer_core::layer::{GpmcpLayer, Initialized, Uninitialized};
 use gpmcp_layer_core::process_manager_trait::RunnerProcessManagerFactory;
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use std::sync::Arc;
 
 /// High-level platform-independent GpmcpRunner
@@ -18,6 +19,17 @@ impl GpmcpCrossLayer<Uninitialized> {
         let manager = PlatformRunnerProcessManagerFactory::create_process_manager(&config);
         Self {
             inner: GpmcpLayer::new(config, Arc::new(manager)),
+        }
+    }
+
+    pub fn new_with_buffer(
+        config: gpmcp_layer_core::config::RunnerConfig,
+        out: LayerStdOut,
+        err: LayerStdErr,
+    ) -> Self {
+        let manager = PlatformRunnerProcessManagerFactory::create_process_manager(&config);
+        Self {
+            inner: GpmcpLayer::new_with_buffers(config, Arc::new(manager), out, err),
         }
     }
 

@@ -4,6 +4,7 @@ use crate::layer::{Initialized, Uninitialized};
 use crate::process_manager_trait::RunnerProcessManager;
 use crate::runner::service_coordinator::ServiceCoordinator;
 use crate::runner::transport_manager::TransportManager;
+use crate::{LayerStdErr, LayerStdOut};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
@@ -15,16 +16,25 @@ pub struct GpmcpRunnerInner<Status, Manager> {
     runner_config: RunnerConfig,
     service_coordinator: Arc<RwLock<Option<ServiceCoordinator>>>,
     process_manager: Arc<Manager>,
+    out: LayerStdOut,
+    err: LayerStdErr,
     _status: std::marker::PhantomData<Status>,
 }
 
 impl<Manager: RunnerProcessManager> GpmcpRunnerInner<Uninitialized, Manager> {
-    pub fn new(runner_config: RunnerConfig, process_manager: Arc<Manager>) -> Self {
+    pub fn new(
+        runner_config: RunnerConfig,
+        process_manager: Arc<Manager>,
+        out: LayerStdOut,
+        err: LayerStdErr,
+    ) -> Self {
         Self {
             cancellation_token: Arc::new(CancellationToken::new()),
             runner_config,
             service_coordinator: Arc::new(RwLock::new(None)),
             process_manager,
+            out,
+            err,
             _status: Default::default(),
         }
     }
@@ -40,10 +50,11 @@ impl<Manager: RunnerProcessManager> GpmcpRunnerInner<Uninitialized, Manager> {
         // For SSE transport, start the server process first
         if matches!(self.runner_config.transport, Transport::Sse { .. }) {
             info!("Starting server process for SSE transport");
-            let _handle =
-                self.process_manager.start_server().await.map_err(|e| {
-                    GpmcpError::process_error(format!("Failed to start server: {e}"))
-                })?;
+            let _handle = self
+                .process_manager
+                .start_server(self.out.clone(), self.err.clone())
+                .await
+                .map_err(|e| GpmcpError::process_error(format!("Failed to start server: {e}")))?;
         }
 
         // Create transport manager
@@ -70,6 +81,8 @@ impl<Manager: RunnerProcessManager> GpmcpRunnerInner<Uninitialized, Manager> {
             runner_config: self.runner_config.clone(),
             service_coordinator: self.service_coordinator.clone(),
             process_manager: self.process_manager.clone(),
+            out: self.out.clone(),
+            err: self.err.clone(),
             _status: Default::default(),
         })
     }

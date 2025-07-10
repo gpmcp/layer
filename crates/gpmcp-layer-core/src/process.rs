@@ -1,3 +1,4 @@
+use crate::{LayerStdErr, LayerStdOut};
 use anyhow::Result;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -105,6 +106,8 @@ pub trait ProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: &HashMap<String, String>,
+        out: LayerStdOut,
+        err: LayerStdErr,
     ) -> Result<Self::Handle>;
 }
 

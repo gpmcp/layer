@@ -1,5 +1,7 @@
+use crate::windows_process_manager::{WindowsProcessHandle, WindowsProcessManager};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use gpmcp_layer_core::{
     config::RunnerConfig,
     process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult},
@@ -7,8 +9,6 @@ use gpmcp_layer_core::{
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-
-use crate::windows_process_manager::{WindowsProcessHandle, WindowsProcessManager};
 
 /// Windows implementation of the RunnerProcessManager trait
 ///
@@ -37,7 +37,7 @@ impl RunnerProcessManager for WindowsRunnerProcessManager {
         }
     }
 
-    async fn start_server(&self) -> Result<Self::Handle> {
+    async fn start_server(&self, out: LayerStdOut, err: LayerStdErr) -> Result<Self::Handle> {
         let command = &self.runner_config.command;
         let args = &self.runner_config.args;
         let working_dir = self
@@ -50,7 +50,7 @@ impl RunnerProcessManager for WindowsRunnerProcessManager {
         // Use the platform manager to spawn the server process
         let handle = self
             .platform_manager
-            .spawn_process(command, args, working_dir, env)
+            .spawn_process(command, args, working_dir, env, out, err)
             .await
             .with_context(|| format!("Failed to start server with command: {command}"))?;
 

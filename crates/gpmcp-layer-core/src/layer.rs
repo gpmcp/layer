@@ -2,6 +2,7 @@ use crate::config::{RetryConfig, RunnerConfig};
 use crate::error::GpmcpError;
 use crate::process_manager_trait::RunnerProcessManager;
 use crate::runner::inner::GpmcpRunnerInner;
+use crate::{LayerStdErr, LayerStdOut};
 use backon::{ExponentialBuilder, Retryable};
 use std::future::Future;
 use std::sync::Arc;
@@ -17,26 +18,49 @@ pub struct GpmcpLayer<Status, Manager> {
     runner_config: RunnerConfig,
     process_manager: Arc<Manager>,
     inner: Arc<Mutex<GpmcpRunnerInner<Status, Manager>>>,
+    out: LayerStdOut,
+    err: LayerStdErr,
     retry_config: ExponentialBuilder,
 }
+
 impl<Manager: RunnerProcessManager> GpmcpLayer<Uninitialized, Manager> {
     pub fn new(runner_config: RunnerConfig, process_manager: Arc<Manager>) -> Self {
+        let out = LayerStdOut::new(Box::new(tokio::io::stdout()));
+        let err = LayerStdErr::new(Box::new(tokio::io::stderr()));
+        Self::new_with_buffers(runner_config, process_manager, out, err)
+    }
+}
+
+impl<Manager: RunnerProcessManager> GpmcpLayer<Uninitialized, Manager> {
+    pub fn new_with_buffers(
+        runner_config: RunnerConfig,
+        process_manager: Arc<Manager>,
+        out: LayerStdOut,
+        err: LayerStdErr,
+    ) -> Self {
         Self {
             inner: Arc::new(Mutex::new(GpmcpRunnerInner::new(
                 runner_config.clone(),
                 process_manager.clone(),
+                out.clone(),
+                err.clone(),
             ))),
+            out,
+            err,
             retry_config: Self::create_retry_strategy(&runner_config.retry_config),
             runner_config,
             process_manager,
         }
     }
+
     pub async fn connect(self) -> Result<GpmcpLayer<Initialized, Manager>, GpmcpError> {
         let initialized_inner = self.inner.lock().await.connect().await?;
         Ok(GpmcpLayer {
             runner_config: self.runner_config,
             retry_config: self.retry_config,
             inner: Arc::new(Mutex::new(initialized_inner)),
+            out: self.out.clone(),
+            err: self.err.clone(),
             process_manager: self.process_manager,
         })
     }
@@ -68,8 +92,12 @@ impl<Manager: RunnerProcessManager> GpmcpLayer<Initialized, Manager> {
         // Create the operation closure that handles connection management
         let operation_with_connection = || async {
             if is_retry.load(std::sync::atomic::Ordering::Relaxed) {
-                let new =
-                    GpmcpRunnerInner::new(self.runner_config.clone(), self.process_manager.clone());
+                let new = GpmcpRunnerInner::new(
+                    self.runner_config.clone(),
+                    self.process_manager.clone(),
+                    self.out.clone(),
+                    self.err.clone(),
+                );
                 *self.inner.lock().await = new.connect().await?;
             }
             operation().await

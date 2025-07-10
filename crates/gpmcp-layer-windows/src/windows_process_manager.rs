@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult};
+use gpmcp_layer_core::process_manager_trait::stream;
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use std::collections::HashMap;
 use std::time::Duration;
 use sysinfo::System;
@@ -232,6 +234,8 @@ impl ProcessManager for WindowsProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: &HashMap<String, String>,
+        out: LayerStdOut,
+        err: LayerStdErr,
     ) -> Result<Self::Handle> {
         let mut cmd = Command::new(command);
         cmd.args(args);
@@ -246,6 +250,10 @@ impl ProcessManager for WindowsProcessManager {
             cmd.env(key, value);
         }
 
+        // Configure stdout and stderr to be captured
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+
         // On Windows, we create processes without a console window for background execution
         // This avoids the annoying console popup while maintaining process management capabilities
         #[cfg(windows)]
@@ -255,7 +263,7 @@ impl ProcessManager for WindowsProcessManager {
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
-        let child = cmd
+        let mut child = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn process: {command}"))?;
 
@@ -265,6 +273,24 @@ impl ProcessManager for WindowsProcessManager {
                 "Spawned Windows process: {} (PID: {}) with args: {:?}",
                 command, pid, args
             );
+        }
+
+        // Capture and stream stdout - the stream function will detect it's stdout and route accordingly
+        if let Some(mut stdout) = child.stdout.take() {
+            tokio::spawn(async move {
+                if let Err(e) = stream(&mut stdout, out).await {
+                    warn!("Error streaming stdout: {}", e);
+                }
+            });
+        }
+
+        // Capture and stream stderr - the stream function will detect it's stderr and route accordingly
+        if let Some(mut stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                if let Err(e) = stream(&mut stderr, err).await {
+                    warn!("Error streaming stderr: {}", e);
+                }
+            });
         }
 
         Ok(WindowsProcessHandle::new(child, command.to_string()))

@@ -4,6 +4,8 @@ use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, Termin
 use std::collections::HashMap;
 use std::time::Duration;
 
+use gpmcp_layer_core::process_manager_trait::stream;
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid as NixPid;
 use sysinfo::System;
@@ -179,6 +181,8 @@ impl ProcessManager for UnixProcessManager {
         args: &[String],
         working_dir: Option<&str>,
         env: &HashMap<String, String>,
+        out: LayerStdOut,
+        err: LayerStdErr,
     ) -> Result<Self::Handle> {
         let mut cmd = Command::new(command);
         cmd.args(args);
@@ -193,10 +197,14 @@ impl ProcessManager for UnixProcessManager {
             cmd.env(key, value);
         }
 
+        // Configure stdout and stderr to be captured
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+
         // Create new process group for better process tree management
         cmd.process_group(0);
 
-        let child = cmd
+        let mut child = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn process: {command}"))?;
 
@@ -208,6 +216,23 @@ impl ProcessManager for UnixProcessManager {
             );
         }
 
+        // Capture and stream stdout - the stream function will detect it's stdout and route accordingly
+        if let Some(mut stdout) = child.stdout.take() {
+            tokio::spawn(async move {
+                if let Err(e) = stream(&mut stdout, out).await {
+                    warn!("Error streaming stdout: {}", e);
+                }
+            });
+        }
+
+        // Capture and stream stderr - the stream function will detect it's stderr and route accordingly
+        if let Some(mut stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                if let Err(e) = stream(&mut stderr, err).await {
+                    warn!("Error streaming stderr: {}", e);
+                }
+            });
+        }
         Ok(UnixProcessHandle::new(child, command.to_string()))
     }
 }
