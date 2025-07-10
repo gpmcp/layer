@@ -21,7 +21,6 @@ pub struct UnixProcessManager {
     system: std::sync::Mutex<System>,
 }
 
-
 impl UnixProcessHandle {
     pub fn new(child: Child, command: String) -> Self {
         Self { child, command }
