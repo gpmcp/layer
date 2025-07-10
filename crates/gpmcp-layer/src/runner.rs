@@ -1,8 +1,9 @@
 use crate::factory::PlatformRunnerProcessManagerFactory;
 use gpmcp_layer_core::error::GpmcpError;
-use gpmcp_layer_core::layer::{GpmcpLayer, Initialized, LayerStdErr, LayerStdOut, Uninitialized};
+use gpmcp_layer_core::layer::{GpmcpLayer, Initialized, Uninitialized};
 use gpmcp_layer_core::process_manager_trait::RunnerProcessManagerFactory;
 use std::sync::Arc;
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 
 /// High-level platform-independent GpmcpRunner
 pub struct GpmcpCrossLayer<Status> {

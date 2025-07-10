@@ -1,11 +1,9 @@
 use crate::config::RunnerConfig;
-use crate::layer::{LayerStdErr, LayerStdOut};
 use crate::process::ProcessHandle;
+use crate::{LayerStdErr, LayerStdOut, LayerStdio};
 use anyhow::Result;
 use async_trait::async_trait;
-use std::any::TypeId;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::process::ChildStdout;
 use tokio_stream::StreamExt;
 use tokio_util::bytes::{Buf, BytesMut};
 use tokio_util::codec::{Decoder, FramedRead};
@@ -200,35 +198,23 @@ impl Decoder for Utf8Codec {
     }
 }
 pub async fn stream<A: AsyncReadExt + Unpin + 'static>(
-    io: &mut Option<A>,
-    out: LayerStdOut,
-    err: LayerStdErr,
+    io: &mut A,
+    out: impl Into<LayerStdio>,
 ) -> tokio::io::Result<()> {
-    if let Some(io) = io.as_mut() {
-        let mut frames = FramedRead::with_capacity(io, Utf8Codec, 1024);
-        let is_stdout = TypeId::of::<A>() == TypeId::of::<ChildStdout>();
-        return stream_frames(&mut frames, is_stdout, out, err).await;
-    }
-    Ok(())
+    let mut frames = FramedRead::with_capacity(io, Utf8Codec, 1024);
+    stream_frames(&mut frames, out.into()).await
 }
 
 async fn stream_frames<R: AsyncReadExt + Unpin>(
     frames: &mut FramedRead<R, Utf8Codec>,
-    is_stdout: bool,
-    out: LayerStdOut,
-    err: LayerStdErr,
+    out: LayerStdio,
 ) -> tokio::io::Result<()> {
     while let Some(frame) = frames.next().await {
         match frame {
             Ok(text) => {
                 let bytes = text.as_bytes();
-                if is_stdout {
-                    out.inner().lock().await.write_all(bytes).await?;
-                    out.inner().lock().await.flush().await?;
-                } else {
-                    err.inner().lock().await.write_all(bytes).await?;
-                    err.inner().lock().await.flush().await?;
-                }
+                out.inner().lock().await.write_all(bytes).await?;
+                out.inner().lock().await.flush().await?;
             }
             Err(e) => {
                 return Err(tokio::io::Error::new(tokio::io::ErrorKind::InvalidData, e));

@@ -1,7 +1,7 @@
 use crate::windows_process_manager::{WindowsProcessHandle, WindowsProcessManager};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use gpmcp_layer_core::layer::{LayerStdErr, LayerStdOut};
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use gpmcp_layer_core::{
     config::RunnerConfig,
     process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult},

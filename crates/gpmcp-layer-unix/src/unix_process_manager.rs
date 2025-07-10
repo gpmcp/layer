@@ -4,7 +4,7 @@ use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, Termin
 use std::collections::HashMap;
 use std::time::Duration;
 
-use gpmcp_layer_core::layer::{LayerStdErr, LayerStdOut};
+use gpmcp_layer_core::{LayerStdErr, LayerStdOut};
 use gpmcp_layer_core::process_manager_trait::stream;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid as NixPid;
@@ -217,22 +217,18 @@ impl ProcessManager for UnixProcessManager {
         }
 
         // Capture and stream stdout - the stream function will detect it's stdout and route accordingly
-        if let Some(stdout) = child.stdout.take() {
-            let out_clone = out.clone();
-            let err_clone = err.clone();
+        if let Some(mut stdout) = child.stdout.take() {
             tokio::spawn(async move {
-                if let Err(e) = stream(&mut Some(stdout), out_clone, err_clone).await {
+                if let Err(e) = stream(&mut stdout, out).await {
                     warn!("Error streaming stdout: {}", e);
                 }
             });
         }
 
         // Capture and stream stderr - the stream function will detect it's stderr and route accordingly
-        if let Some(stderr) = child.stderr.take() {
-            let out_clone = out.clone();
-            let err_clone = err.clone();
+        if let Some(mut stderr) = child.stderr.take() {
             tokio::spawn(async move {
-                if let Err(e) = stream(&mut Some(stderr), out_clone, err_clone).await {
+                if let Err(e) = stream(&mut stderr, err).await {
                     warn!("Error streaming stderr: {}", e);
                 }
             });
