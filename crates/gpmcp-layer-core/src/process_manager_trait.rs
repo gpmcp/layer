@@ -1,9 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use std::collections::HashMap;
 
 use crate::config::RunnerConfig;
-use crate::process::{ProcessHandle, ProcessId};
+use crate::process::ProcessHandle;
 
 /// High-level process manager trait for platform-independent process orchestration
 ///
@@ -93,41 +92,6 @@ pub trait RunnerProcessManager: Send + Sync {
     /// ```
     async fn start_server(&self) -> Result<Self::Handle>;
 
-    /// Spawn a new process with the given parameters and track it for cleanup
-    ///
-    /// This method spawns a process with the specified command and arguments, optionally
-    /// setting a working directory and environment variables. The spawned process will
-    /// be automatically tracked and included in cleanup operations.
-    ///
-    /// # Arguments
-    ///
-    /// * `command` - The command to execute
-    /// * `args` - Command-line arguments for the process
-    /// * `working_dir` - Optional working directory for the process
-    /// * `env` - Optional environment variables for the process
-    ///
-    /// # Returns
-    ///
-    /// Returns a handle to the spawned process or an error if spawning fails.
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// // let handle = manager.spawn_process(
-    /// //     "node",
-    /// //     &["script.js".to_string()],
-    /// //     Some("/path/to/working/dir"),
-    /// //     Some(&env_vars)
-    /// // ).await?;
-    /// ```
-    async fn spawn_process(
-        &self,
-        command: &str,
-        args: &[String],
-        working_dir: Option<&str>,
-        env: Option<&HashMap<String, String>>,
-    ) -> Result<Self::Handle>;
-
     /// Cleanup all tracked processes and release resources
     ///
     /// This method performs coordinated cleanup of all processes managed by this instance.
@@ -154,95 +118,6 @@ pub trait RunnerProcessManager: Send + Sync {
     /// // manager.cleanup().await?;
     /// ```
     async fn cleanup(&self) -> Result<()>;
-
-    /// Get the number of currently tracked active processes
-    ///
-    /// This method returns the count of processes currently being tracked by this
-    /// process manager instance. This can be useful for monitoring and debugging.
-    ///
-    /// # Returns
-    ///
-    /// Returns the number of active tracked processes.
-    fn active_process_count(&self) -> usize;
-
-    /// Get information about all currently tracked processes
-    ///
-    /// This method returns a snapshot of all currently tracked processes, including
-    /// their process IDs and the commands that started them. This is useful for
-    /// monitoring and debugging purposes.
-    ///
-    /// # Returns
-    ///
-    /// Returns a vector of tuples containing (ProcessId, command_name) for each
-    /// tracked process.
-    fn get_tracked_processes(&self) -> Vec<(ProcessId, String)>;
-}
-
-/// Trait object-safe version of RunnerProcessManager for dynamic dispatch
-///
-/// This trait provides the same interface as RunnerProcessManager but uses boxed
-/// trait objects for return types, making it suitable for use in trait objects.
-/// This allows for dynamic dispatch when needed while still providing the
-/// associated type version for static dispatch scenarios.
-#[async_trait]
-pub trait DynRunnerProcessManager: Send + Sync {
-    /// Start the server process using the configuration provided during construction
-    async fn start_server(&self) -> Result<Box<dyn ProcessHandle>>;
-
-    /// Spawn a new process with the given parameters and track it for cleanup
-    async fn spawn_process(
-        &self,
-        command: &str,
-        args: &[String],
-        working_dir: Option<&str>,
-        env: Option<&HashMap<String, String>>,
-    ) -> Result<Box<dyn ProcessHandle>>;
-
-    /// Cleanup all tracked processes and release resources
-    async fn cleanup(&self) -> Result<()>;
-
-    /// Get the number of currently tracked active processes
-    fn active_process_count(&self) -> usize;
-
-    /// Get information about all currently tracked processes
-    fn get_tracked_processes(&self) -> Vec<(ProcessId, String)>;
-}
-
-/// Blanket implementation to automatically provide DynRunnerProcessManager for any RunnerProcessManager
-#[async_trait]
-impl<T> DynRunnerProcessManager for T
-where
-    T: RunnerProcessManager + Send + Sync,
-    T::Handle: 'static,
-{
-    async fn start_server(&self) -> Result<Box<dyn ProcessHandle>> {
-        let handle = RunnerProcessManager::start_server(self).await?;
-        Ok(Box::new(handle))
-    }
-
-    async fn spawn_process(
-        &self,
-        command: &str,
-        args: &[String],
-        working_dir: Option<&str>,
-        env: Option<&HashMap<String, String>>,
-    ) -> Result<Box<dyn ProcessHandle>> {
-        let handle =
-            RunnerProcessManager::spawn_process(self, command, args, working_dir, env).await?;
-        Ok(Box::new(handle))
-    }
-
-    async fn cleanup(&self) -> Result<()> {
-        RunnerProcessManager::cleanup(self).await
-    }
-
-    fn active_process_count(&self) -> usize {
-        RunnerProcessManager::active_process_count(self)
-    }
-
-    fn get_tracked_processes(&self) -> Vec<(ProcessId, String)> {
-        RunnerProcessManager::get_tracked_processes(self)
-    }
 }
 
 /// Factory trait for creating platform-specific RunnerProcessManager implementations
@@ -262,10 +137,7 @@ where
 /// //     async fn create_process_manager(config: &RunnerConfig) -> Result<Self::Manager> {
 /// //         UnixRunnerProcessManager::new(config).await
 /// //     }
-/// //     
-/// //     fn platform_name() -> &'static str {
-/// //         "unix"
-/// //     }
+/// //
 /// // }
 /// ```
 #[async_trait]
@@ -283,11 +155,4 @@ pub trait RunnerProcessManagerFactory {
     ///
     /// Returns a new process manager instance or an error if creation fails.
     fn create_process_manager(config: &RunnerConfig) -> Self::Manager;
-
-    /// Get the platform name for logging and debugging
-    ///
-    /// # Returns
-    ///
-    /// Returns a static string identifying the platform (e.g., "windows", "unix").
-    fn platform_name() -> &'static str;
 }

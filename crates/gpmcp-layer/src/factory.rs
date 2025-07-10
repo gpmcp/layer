@@ -22,12 +22,4 @@ impl RunnerProcessManagerFactory for PlatformRunnerProcessManagerFactory {
             config,
         );
     }
-
-    fn platform_name() -> &'static str {
-        #[cfg(unix)]
-        return "unix";
-
-        #[cfg(windows)]
-        return "windows";
-    }
 }
