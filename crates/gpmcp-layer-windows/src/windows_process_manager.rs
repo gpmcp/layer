@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use gpmcp_layer_core::process::{
-    ProcessHandle, ProcessId, ProcessInfo, ProcessLifecycle, ProcessManager, ProcessStatus,
-    ProcessTermination, TerminationResult,
+    ProcessHandle, ProcessId, ProcessLifecycle, ProcessManager, ProcessTermination,
+    TerminationResult,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -14,16 +14,11 @@ use tracing::{info, warn};
 pub struct WindowsProcessHandle {
     child: Child,
     command: String,
-    args: Vec<String>,
 }
 
 impl WindowsProcessHandle {
-    pub fn new(child: Child, command: String, args: Vec<String>) -> Self {
-        Self {
-            child,
-            command,
-            args,
-        }
+    pub fn new(child: Child, command: String) -> Self {
+        Self { child, command }
     }
 }
 
@@ -35,38 +30,6 @@ impl ProcessHandle for WindowsProcessHandle {
 
     fn get_command(&self) -> &str {
         &self.command
-    }
-
-    fn get_args(&self) -> &[String] {
-        &self.args
-    }
-
-    async fn is_running(&self) -> bool {
-        // On Windows, we can check if the process is running by attempting to get its status
-        if let Some(_pid) = self.get_pid() {
-            // Use sysinfo to check if process exists
-            let mut system = System::new();
-            system.refresh_processes_specifics(
-                sysinfo::ProcessesToUpdate::All,
-                true,
-                sysinfo::ProcessRefreshKind::everything(),
-            );
-            system.processes().iter().any(|(p, _)| p.as_u32() == _pid)
-        } else {
-            false
-        }
-    }
-
-    async fn try_wait(&mut self) -> Result<Option<ProcessStatus>> {
-        match self.child.try_wait()? {
-            Some(status) => Ok(Some(ProcessStatus::Exited(status))),
-            None => Ok(None),
-        }
-    }
-
-    async fn wait(&mut self) -> Result<ProcessStatus> {
-        let status = self.child.wait().await?;
-        Ok(ProcessStatus::Exited(status))
     }
 
     async fn kill(&mut self) -> Result<()> {
@@ -133,99 +96,12 @@ impl ProcessLifecycle for WindowsProcessManager {
             );
         }
 
-        Ok(WindowsProcessHandle::new(
-            child,
-            command.to_string(),
-            args.to_vec(),
-        ))
-    }
-
-    async fn is_process_healthy(&self, handle: &dyn ProcessHandle) -> bool {
-        handle.is_running().await
-    }
-
-    async fn get_process_info(&self, handle: &dyn ProcessHandle) -> Result<ProcessInfo> {
-        let pid = handle
-            .get_pid()
-            .ok_or_else(|| anyhow::anyhow!("Process has no PID"))?;
-
-        let status = if handle.is_running().await {
-            ProcessStatus::Running
-        } else {
-            ProcessStatus::Terminated
-        };
-
-        Ok(ProcessInfo {
-            pid,
-            status,
-            command: handle.get_command().to_string(),
-            args: handle.get_args().to_vec(),
-        })
-    }
-
-    async fn wait_for_exit(
-        &self,
-        handle: &mut dyn ProcessHandle,
-        timeout: Option<Duration>,
-    ) -> Result<ProcessStatus> {
-        match timeout {
-            Some(duration) => tokio::time::timeout(duration, handle.wait())
-                .await
-                .map_err(|_| anyhow::anyhow!("Timeout waiting for process exit"))?,
-            None => handle.wait().await,
-        }
+        Ok(WindowsProcessHandle::new(child, command.to_string()))
     }
 }
 
 #[async_trait]
 impl ProcessTermination for WindowsProcessManager {
-    async fn terminate_gracefully(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
-        // On Windows, we'll use taskkill with /T flag for graceful termination
-        if let Some(pid) = handle.get_pid() {
-            match self.taskkill(pid, false).await {
-                Ok(true) => {
-                    info!("Successfully sent graceful termination to process {}", pid);
-                    TerminationResult::Success
-                }
-                Ok(false) => {
-                    warn!("Process {} not found for graceful termination", pid);
-                    TerminationResult::ProcessNotFound
-                }
-                Err(e) => {
-                    warn!("Failed to gracefully terminate process {}: {}", pid, e);
-                    TerminationResult::Failed(format!("Graceful termination failed: {e}"))
-                }
-            }
-        } else {
-            TerminationResult::ProcessNotFound
-        }
-    }
-
-    async fn force_kill(&self, handle: &mut dyn ProcessHandle) -> TerminationResult {
-        if let Some(pid) = handle.get_pid() {
-            match self.taskkill(pid, true).await {
-                Ok(true) => {
-                    info!("Successfully force killed process {}", pid);
-                    // Also call handle's kill method for cleanup
-                    if let Err(e) = handle.kill().await {
-                        warn!("Handle kill cleanup failed: {}", e);
-                    }
-                    TerminationResult::Success
-                }
-                Ok(false) => {
-                    info!("Process {} not found for force kill", pid);
-                    TerminationResult::ProcessNotFound
-                }
-                Err(e) => {
-                    warn!("Failed to force kill process {}: {}", pid, e);
-                    TerminationResult::Failed(format!("Force kill failed: {e}"))
-                }
-            }
-        } else {
-            TerminationResult::ProcessNotFound
-        }
-    }
-
     async fn find_child_processes(&self, parent_pid: ProcessId) -> Result<Vec<ProcessId>> {
         let mut system = self.system.lock().unwrap();
         system.refresh_processes_specifics(
@@ -294,12 +170,6 @@ impl ProcessTermination for WindowsProcessManager {
                 self.terminate_single_process(root_pid).await
             }
         }
-    }
-
-    async fn terminate_process_group(&self, _pid: ProcessId) -> TerminationResult {
-        // Windows doesn't have Unix-style process groups
-        // Return ProcessNotFound to indicate this method is not supported
-        TerminationResult::ProcessNotFound
     }
 }
 

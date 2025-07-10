@@ -1,6 +1,6 @@
 use crate::config::{RetryConfig, RunnerConfig};
 use crate::error::GpmcpError;
-use crate::process_manager_trait::DynRunnerProcessManager;
+use crate::process_manager_trait::RunnerProcessManager;
 use crate::runner::inner::GpmcpRunnerInner;
 use backon::{ExponentialBuilder, Retryable};
 use std::future::Future;
@@ -13,17 +13,14 @@ pub struct Initialized;
 pub struct Uninitialized;
 
 #[derive(Clone)]
-pub struct GpmcpLayer<Status> {
+pub struct GpmcpLayer<Status, Manager> {
     runner_config: RunnerConfig,
-    process_manager: Arc<dyn DynRunnerProcessManager>,
-    inner: Arc<Mutex<GpmcpRunnerInner<Status>>>,
+    process_manager: Arc<Manager>,
+    inner: Arc<Mutex<GpmcpRunnerInner<Status, Manager>>>,
     retry_config: ExponentialBuilder,
 }
-impl GpmcpLayer<Uninitialized> {
-    pub fn new(
-        runner_config: RunnerConfig,
-        process_manager: Arc<dyn DynRunnerProcessManager>,
-    ) -> Self {
+impl<Manager: RunnerProcessManager> GpmcpLayer<Uninitialized, Manager> {
+    pub fn new(runner_config: RunnerConfig, process_manager: Arc<Manager>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(GpmcpRunnerInner::new(
                 runner_config.clone(),
@@ -34,7 +31,7 @@ impl GpmcpLayer<Uninitialized> {
             process_manager,
         }
     }
-    pub async fn connect(self) -> Result<GpmcpLayer<Initialized>, GpmcpError> {
+    pub async fn connect(self) -> Result<GpmcpLayer<Initialized, Manager>, GpmcpError> {
         let initialized_inner = self.inner.lock().await.connect().await?;
         Ok(GpmcpLayer {
             runner_config: self.runner_config,
@@ -57,7 +54,7 @@ impl GpmcpLayer<Uninitialized> {
         retry_builder
     }
 }
-impl GpmcpLayer<Initialized> {
+impl<Manager: RunnerProcessManager> GpmcpLayer<Initialized, Manager> {
     /// Generic retry mechanism for operations that may fail due to connection issues
     /// Uses backon library with GpmcpError.is_retryable() to determine if an error should be retried
     async fn attempt_with_retry<T, F, Fut>(&self, operation: F) -> Result<T, GpmcpError>
