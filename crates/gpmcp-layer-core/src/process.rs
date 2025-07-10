@@ -67,32 +67,6 @@ pub enum ProcessError {
     Other(String),
 }
 
-/// Core trait for process lifecycle management with associated types for better performance
-#[async_trait]
-pub trait ProcessLifecycle: Send + Sync {
-    /// The type of process handle this lifecycle manager produces
-    type Handle: ProcessHandle;
-
-    /// Spawn a new process with the given command and arguments
-    async fn spawn_process(
-        &self,
-        command: &str,
-        args: &[String],
-        working_dir: Option<&str>,
-        env: &HashMap<String, String>,
-    ) -> Result<Self::Handle>;
-}
-
-/// Trait for comprehensive process termination including process trees
-#[async_trait]
-pub trait ProcessTermination: Send + Sync {
-    /// Find all child processes of a given process
-    async fn find_child_processes(&self, pid: ProcessId) -> Result<Vec<ProcessId>>;
-
-    /// Terminate an entire process tree (parent and all descendants)
-    async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult;
-}
-
 /// Trait representing a handle to a running process
 #[async_trait]
 pub trait ProcessHandle: Send + Sync {
@@ -108,7 +82,9 @@ pub trait ProcessHandle: Send + Sync {
 
 /// High-level process manager trait that combines lifecycle and termination
 #[async_trait]
-pub trait ProcessManager: ProcessLifecycle + ProcessTermination {
+pub trait ProcessManager {
+    /// The type of process handle this lifecycle manager produces
+    type Handle: ProcessHandle;
     /// Create a new process manager instance
     fn new() -> Self
     where
@@ -116,6 +92,20 @@ pub trait ProcessManager: ProcessLifecycle + ProcessTermination {
 
     /// Cleanup any resources held by the process manager
     async fn cleanup(&self) -> Result<()>;
+    /// Find all child processes of a given process
+    async fn find_child_processes(&self, pid: ProcessId) -> Result<Vec<ProcessId>>;
+
+    /// Terminate an entire process tree (parent and all descendants)
+    async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult;
+
+    /// Spawn a new process with the given command and arguments
+    async fn spawn_process(
+        &self,
+        command: &str,
+        args: &[String],
+        working_dir: Option<&str>,
+        env: &HashMap<String, String>,
+    ) -> Result<Self::Handle>;
 }
 
 /// Factory trait for creating platform-specific process managers

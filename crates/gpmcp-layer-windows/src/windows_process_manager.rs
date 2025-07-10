@@ -1,9 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use gpmcp_layer_core::process::{
-    ProcessHandle, ProcessId, ProcessLifecycle, ProcessManager, ProcessTermination,
-    TerminationResult,
-};
+use gpmcp_layer_core::process::{ProcessHandle, ProcessId, ProcessManager, TerminationResult};
 use std::collections::HashMap;
 use std::time::Duration;
 use sysinfo::System;
@@ -50,129 +47,6 @@ impl Default for WindowsProcessManager {
         Self::new()
     }
 }
-
-#[async_trait]
-impl ProcessLifecycle for WindowsProcessManager {
-    type Handle = WindowsProcessHandle;
-
-    async fn spawn_process(
-        &self,
-        command: &str,
-        args: &[String],
-        working_dir: Option<&str>,
-        env: &HashMap<String, String>,
-    ) -> Result<Self::Handle> {
-        let mut cmd = Command::new(command);
-        cmd.args(args);
-
-        // Set working directory
-        if let Some(dir) = working_dir {
-            cmd.current_dir(dir);
-        }
-
-        // Set environment variables
-        for (key, value) in env {
-            cmd.env(key, value);
-        }
-
-        // On Windows, we create processes without a console window for background execution
-        // This avoids the annoying console popup while maintaining process management capabilities
-        #[cfg(windows)]
-        {
-            // CREATE_NO_WINDOW (0x08000000) - Creates a process without a console window
-            // This is better than CREATE_NEW_CONSOLE for background processes
-            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        }
-
-        let child = cmd
-            .spawn()
-            .with_context(|| format!("Failed to spawn process: {command}"))?;
-
-        // Log successful process creation
-        if let Some(pid) = child.id() {
-            info!(
-                "Spawned Windows process: {} (PID: {}) with args: {:?}",
-                command, pid, args
-            );
-        }
-
-        Ok(WindowsProcessHandle::new(child, command.to_string()))
-    }
-}
-
-#[async_trait]
-impl ProcessTermination for WindowsProcessManager {
-    async fn find_child_processes(&self, parent_pid: ProcessId) -> Result<Vec<ProcessId>> {
-        let mut system = self.system.lock().unwrap();
-        system.refresh_processes_specifics(
-            sysinfo::ProcessesToUpdate::All,
-            true,
-            sysinfo::ProcessRefreshKind::everything(),
-        );
-
-        let mut children = Vec::new();
-        Self::find_children_recursive(&system, parent_pid, &mut children);
-
-        Ok(children.into_iter().collect())
-    }
-
-    async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {
-        info!("Terminating process tree for root PID {}", root_pid);
-
-        // On Windows, we can use taskkill with /T flag to kill process trees
-        match self.taskkill_tree(root_pid).await {
-            Ok(true) => {
-                info!("Successfully terminated process tree for PID {}", root_pid);
-                TerminationResult::Success
-            }
-            Ok(false) => {
-                info!("Process tree for PID {} not found", root_pid);
-                TerminationResult::ProcessNotFound
-            }
-            Err(e) => {
-                warn!(
-                    "Failed to terminate process tree for PID {}: {}",
-                    root_pid, e
-                );
-
-                // Fallback: manual process tree termination
-                let children = match self.find_child_processes(root_pid).await {
-                    Ok(children) => children,
-                    Err(e) => {
-                        warn!("Failed to find child processes for PID {}: {}", root_pid, e);
-                        return TerminationResult::Failed(format!(
-                            "Failed to enumerate children: {e}"
-                        ));
-                    }
-                };
-
-                if !children.is_empty() {
-                    info!(
-                        "Found {} child processes to terminate manually",
-                        children.len()
-                    );
-
-                    // Terminate children first (bottom-up approach)
-                    for child_pid in children.iter().rev() {
-                        match self.terminate_single_process(*child_pid).await {
-                            TerminationResult::Success | TerminationResult::ProcessNotFound => {}
-                            result => {
-                                warn!(
-                                    "Failed to terminate child process {}: {:?}",
-                                    child_pid, result
-                                );
-                            }
-                        }
-                    }
-                }
-
-                // Finally terminate the root process
-                self.terminate_single_process(root_pid).await
-            }
-        }
-    }
-}
-
 impl WindowsProcessManager {
     /// Use taskkill to terminate a single process
     async fn taskkill(&self, pid: u32, force: bool) -> Result<bool> {
@@ -269,6 +143,8 @@ impl WindowsProcessManager {
 
 #[async_trait]
 impl ProcessManager for WindowsProcessManager {
+    type Handle = WindowsProcessHandle;
+
     fn new() -> Self {
         Self {
             system: std::sync::Mutex::new(System::new_all()),
@@ -278,5 +154,119 @@ impl ProcessManager for WindowsProcessManager {
     async fn cleanup(&self) -> Result<()> {
         info!("Windows process manager cleanup completed");
         Ok(())
+    }
+
+    async fn find_child_processes(&self, parent_pid: ProcessId) -> Result<Vec<ProcessId>> {
+        let mut system = self.system.lock().unwrap();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::everything(),
+        );
+
+        let mut children = Vec::new();
+        Self::find_children_recursive(&system, parent_pid, &mut children);
+
+        Ok(children.into_iter().collect())
+    }
+
+    async fn terminate_process_tree(&self, root_pid: ProcessId) -> TerminationResult {
+        info!("Terminating process tree for root PID {}", root_pid);
+
+        // On Windows, we can use taskkill with /T flag to kill process trees
+        match self.taskkill_tree(root_pid).await {
+            Ok(true) => {
+                info!("Successfully terminated process tree for PID {}", root_pid);
+                TerminationResult::Success
+            }
+            Ok(false) => {
+                info!("Process tree for PID {} not found", root_pid);
+                TerminationResult::ProcessNotFound
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to terminate process tree for PID {}: {}",
+                    root_pid, e
+                );
+
+                // Fallback: manual process tree termination
+                let children = match self.find_child_processes(root_pid).await {
+                    Ok(children) => children,
+                    Err(e) => {
+                        warn!("Failed to find child processes for PID {}: {}", root_pid, e);
+                        return TerminationResult::Failed(format!(
+                            "Failed to enumerate children: {e}"
+                        ));
+                    }
+                };
+
+                if !children.is_empty() {
+                    info!(
+                        "Found {} child processes to terminate manually",
+                        children.len()
+                    );
+
+                    // Terminate children first (bottom-up approach)
+                    for child_pid in children.iter().rev() {
+                        match self.terminate_single_process(*child_pid).await {
+                            TerminationResult::Success | TerminationResult::ProcessNotFound => {}
+                            result => {
+                                warn!(
+                                    "Failed to terminate child process {}: {:?}",
+                                    child_pid, result
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Finally terminate the root process
+                self.terminate_single_process(root_pid).await
+            }
+        }
+    }
+
+    async fn spawn_process(
+        &self,
+        command: &str,
+        args: &[String],
+        working_dir: Option<&str>,
+        env: &HashMap<String, String>,
+    ) -> Result<Self::Handle> {
+        let mut cmd = Command::new(command);
+        cmd.args(args);
+
+        // Set working directory
+        if let Some(dir) = working_dir {
+            cmd.current_dir(dir);
+        }
+
+        // Set environment variables
+        for (key, value) in env {
+            cmd.env(key, value);
+        }
+
+        // On Windows, we create processes without a console window for background execution
+        // This avoids the annoying console popup while maintaining process management capabilities
+        #[cfg(windows)]
+        {
+            // CREATE_NO_WINDOW (0x08000000) - Creates a process without a console window
+            // This is better than CREATE_NEW_CONSOLE for background processes
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        let child = cmd
+            .spawn()
+            .with_context(|| format!("Failed to spawn process: {command}"))?;
+
+        // Log successful process creation
+        if let Some(pid) = child.id() {
+            info!(
+                "Spawned Windows process: {} (PID: {}) with args: {:?}",
+                command, pid, args
+            );
+        }
+
+        Ok(WindowsProcessHandle::new(child, command.to_string()))
     }
 }
