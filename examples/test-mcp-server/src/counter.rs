@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use rmcp::{
-    Error as McpError, RoleServer, ServerHandler, handler::server::router::tool::ToolRouter,
+    ErrorData as McpError, RoleServer, ServerHandler, handler::server::router::tool::ToolRouter,
     model::*, service::RequestContext, tool, tool_handler, tool_router,
 };
 use serde_json::json;
