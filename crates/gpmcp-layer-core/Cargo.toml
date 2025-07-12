@@ -13,7 +13,7 @@ derive_builder = "0.20.2"
 tokio = { version = "1.45.1", features = ["time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-rmcp = { git = "https://github.com/gpmcp/rust-sdk", rev = "b9d7d61ebd6e8385cbc4aa105d4e25774fc1a59c", features = [
+rmcp = { git = "https://github.com/gpmcp/rust-sdk", rev = "e615300feae62a01f90f40fc7711ab15c3f0a88c", features = [
     "client",
     "transport-sse-client",
     "reqwest",

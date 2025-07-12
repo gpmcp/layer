@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 serde_json = "1.0.140"
-rmcp = { git = "https://github.com/gpmcp/rust-sdk", rev = "b9d7d61ebd6e8385cbc4aa105d4e25774fc1a59c", features = [
+rmcp = { git = "https://github.com/gpmcp/rust-sdk", rev = "e615300feae62a01f90f40fc7711ab15c3f0a88c", features = [
     "client",
     "transport-sse-client",
     "reqwest",
@@ -21,3 +21,4 @@ axum = "0.8.4"
 tracing = "0.1.41"
 anyhow = "1.0.98"
 tokio-util = "0.7.15"
+tower = "0.4.13"

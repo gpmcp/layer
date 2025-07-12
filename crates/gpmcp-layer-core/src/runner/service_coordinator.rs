@@ -35,6 +35,10 @@ impl ServiceCoordinator {
                 .serve(sse_transport)
                 .await
                 .context("Failed to create SSE service")?,
+            super::transport_manager::TransportVariant::Http(http_transport) => client_info
+                .serve(http_transport)
+                .await
+                .context("Failed to create HTTP service")?,
         };
 
         info!("Service coordinator created successfully");

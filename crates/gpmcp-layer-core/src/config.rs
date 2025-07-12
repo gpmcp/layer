@@ -128,6 +128,9 @@ pub enum Transport {
     Sse {
         url: String,
     },
+    Http {
+        url: String,
+    },
 }
 
 /// Main runner configuration
