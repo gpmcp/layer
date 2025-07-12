@@ -48,8 +48,11 @@ impl<Manager: RunnerProcessManager> GpmcpRunnerInner<Uninitialized, Manager> {
         // Determine transport type and create appropriate managers
 
         // For SSE transport, start the server process first
-        if matches!(self.runner_config.transport, Transport::Sse { .. }) {
-            info!("Starting server process for SSE transport");
+        if matches!(
+            self.runner_config.transport,
+            Transport::Sse { .. } | Transport::Http { .. }
+        ) {
+            info!("Starting server process");
             let _handle = self
                 .process_manager
                 .start_server(self.out.clone(), self.err.clone())

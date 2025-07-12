@@ -1,7 +1,8 @@
 use crate::config::{RunnerConfig, Transport};
 use anyhow::{Context, Result};
 use backon::{BackoffBuilder, ExponentialBuilder, Retryable};
-use rmcp::transport::{SseClientTransport, TokioChildProcess};
+use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
+use rmcp::transport::{SseClientTransport, StreamableHttpClientTransport, TokioChildProcess};
 use std::time::Duration;
 use tokio::process::Command;
 use tracing::{info, warn};
@@ -14,6 +15,7 @@ pub struct TransportManager {
 pub enum TransportVariant {
     Stdio(TokioChildProcess),
     Sse(SseClientTransport<reqwest::Client>),
+    Http(StreamableHttpClientTransport<reqwest::Client>),
 }
 
 impl TransportManager {
@@ -27,6 +29,10 @@ impl TransportManager {
             Transport::Sse { url } => {
                 info!("Creating SSE transport for URL: {}", url);
                 Self::create_sse_transport(url).await?
+            }
+            Transport::Http { url } => {
+                warn!("Creating HTTP transport for URL: {}", url);
+                Self::create_http_transport(url).await?
             }
         };
 
@@ -73,7 +79,7 @@ impl TransportManager {
 
         // Poll the server to check if it's ready using list_tools request
         // Use shorter timeout for faster failure in test environments
-        Self::poll_server_readiness(&url_string, 100, 1000).await?;
+        Self::poll_server_readiness(&url_string, 100, 1000, Self::test_server_connectivity).await?;
 
         // Create SSE transport
         let transport = SseClientTransport::start(url_string)
@@ -84,8 +90,17 @@ impl TransportManager {
     }
 
     /// Poll the server readiness by attempting to connect and call list_tools
-    async fn poll_server_readiness(url: &str, max_attempts: u32, interval_ms: u64) -> Result<()> {
-        info!(url=%url, max_attempts=?max_attempts, interval_ms=?interval_ms, "Polling server readiness");
+    async fn poll_server_readiness<F, R>(
+        url: &str,
+        max_attempts: u32,
+        interval_ms: u64,
+        f: F,
+    ) -> Result<()>
+    where
+        F: Fn(String) -> R + Send + Sync,
+        R: Future<Output = Result<()>> + Send,
+    {
+        info!(url = % url, max_attempts =? max_attempts, interval_ms = ? interval_ms, "Polling server readiness");
 
         let poll = ExponentialBuilder::new()
             .with_jitter()
@@ -95,16 +110,16 @@ impl TransportManager {
             .with_max_delay(Duration::from_secs(1))
             .build();
 
-        (|| Self::test_server_connectivity(url)).retry(poll).await
+        (|| f(url.to_string())).retry(poll).await
     }
 
     /// Test server connectivity by creating a temporary connection and calling list_tools
-    async fn test_server_connectivity(url: &str) -> Result<()> {
+    async fn test_server_connectivity(url: String) -> Result<()> {
         use rmcp::ServiceExt;
         use rmcp::model::ClientInfo;
 
         // Create a temporary SSE transport for testing
-        let test_transport = SseClientTransport::start(url.to_string())
+        let test_transport = SseClientTransport::start(url)
             .await
             .context("Failed to create test SSE transport")?;
 
@@ -142,5 +157,57 @@ impl TransportManager {
     /// Consumes the manager and returns the transport for service creation
     pub fn into_transport(self) -> TransportVariant {
         self.transport
+    }
+
+    async fn create_http_transport(url: impl ToString) -> Result<TransportVariant> {
+        let url_string = url.to_string();
+        Self::poll_server_readiness(&url_string, 100, 1000, Self::test_server_connectivity_http)
+            .await?;
+        let transport = StreamableHttpClientTransport::with_client(
+            reqwest::Client::new(),
+            StreamableHttpClientTransportConfig::with_uri(url_string),
+        );
+
+        Ok(TransportVariant::Http(transport))
+    }
+    async fn test_server_connectivity_http(url: String) -> Result<()> {
+        use rmcp::ServiceExt;
+        use rmcp::model::ClientInfo;
+
+        // Create a temporary SSE transport for testing
+        let test_transport = StreamableHttpClientTransport::with_client(
+            reqwest::Client::new(),
+            StreamableHttpClientTransportConfig::with_uri(url),
+        );
+
+        // Create minimal client info for testing
+        let client_info = ClientInfo {
+            protocol_version: rmcp::model::ProtocolVersion::default(),
+            capabilities: rmcp::model::ClientCapabilities::default(),
+            client_info: rmcp::model::Implementation {
+                name: "gpmcp-readiness-test".to_string(),
+                version: "0.1.0".to_string(),
+            },
+        };
+
+        // Try to establish service and call list_tools
+        let service = client_info
+            .serve(test_transport)
+            .await
+            .context("Failed to create test service")?;
+
+        // Call list_tools to verify server is responding
+        let _result = service
+            .list_tools(Default::default())
+            .await
+            .context("Server not responding to list_tools")?;
+
+        // Cancel the test service
+        service
+            .cancel()
+            .await
+            .context("Failed to cancel test service")?;
+
+        Ok(())
     }
 }
